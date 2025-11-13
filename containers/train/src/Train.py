@@ -1,7 +1,8 @@
 import torch
 import model.LSTM as LSTMModel
+import model.Transformer as TransformerModel
 import StockDataset
-import stockflow.containers.train.src.GetDummies as GetDummies
+import GetDummies
 
 def train_model(model, dataLoader, lr=0.001, epochs=30, loss_fn=torch.nn.MSELoss(), log_interval=10):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -48,11 +49,22 @@ def main():
         shuffle=True
     )
 
-    model = LSTMModel.LSTM(
-        input_size=len(feat_cols),
-        hidden_size=64,
-        num_layers=4,
-        pkl_path=None
+    # model = LSTMModel.LSTM(
+    #     input_size=len(feat_cols),
+    #     hidden_size=64,
+    #     num_layers=4,
+    #     pkl_path=None
+    # )
+
+    model = TransformerModel.Transformer(
+        input_size=len(feat_cols),   # 4 features
+        d_model=64,
+        nhead=4,
+        num_layers=2,
+        dim_feedforward=128,
+        dropout=0.1,
+        output_size=1,
+        pkl_path=None,
     )
     
 

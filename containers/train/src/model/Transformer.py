@@ -1,56 +1,79 @@
+import math
 import torch
 import torch.nn as nn
 
-class TransformerModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_heads=4, num_layers=2,
-                 output_size=1, dropout=0.1, pkl_path=None):
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+
+        pe = torch.zeros(max_len, d_model)          # (max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1)  # (max_len, 1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)
+        )
+        pe[:, 0::2] = torch.sin(position * div_term)   # even
+        pe[:, 1::2] = torch.cos(position * div_term)   # odd
+
+        pe = pe.unsqueeze(0)  # (1, max_len, d_model) for batch_first
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: (batch, seq_len, d_model)
+        """
+        seq_len = x.size(1)
+        x = x + self.pe[:, :seq_len]
+        return self.dropout(x)
+
+
+class Transformer(nn.Module):
+    def __init__(
+        self,
+        input_size: int,
+        d_model: int = 64,
+        nhead: int = 4,
+        num_layers: int = 2,
+        dim_feedforward: int = 128,
+        dropout: float = 0.1,
+        output_size: int = 1,
+        pkl_path: str | None = None,
+    ):
         super().__init__()
 
-        self.input_size = input_size
-        self.hidden_size = hidden_size
+        self.input_proj = nn.Linear(input_size, d_model)
 
-        self.embedding = nn.Linear(input_size, hidden_size)
-
-        self.positional_encoding = self._generate_positional_encoding(500, hidden_size)
+        self.pos_encoder = PositionalEncoding(d_model, dropout=dropout)
 
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_size,
-            nhead=num_heads,
-            dim_feedforward=hidden_size,
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
             dropout=dropout,
-            batch_first=True
+            batch_first=True,
         )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
-        self.fc = nn.Linear(hidden_size, output_size)
+        self.fc_out = nn.Linear(d_model, output_size)
 
         if pkl_path:
             self.load_model(pkl_path)
             self.eval()
 
-    def _generate_positional_encoding(self, max_len, hidden_size):
-        pos = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        i = torch.arange(0, hidden_size, dtype=torch.float).unsqueeze(0)
-        angle_rates = 1 / torch.pow(10000, (2 * (i // 2)) / hidden_size)
-        angle_rads = pos * angle_rates
-        pe = torch.zeros(max_len, hidden_size)
-        pe[:, 0::2] = torch.sin(angle_rads[:, 0::2])
-        pe[:, 1::2] = torch.cos(angle_rads[:, 1::2])
-        pe = pe.unsqueeze(0)
-        return pe  # shape (1, max_len, hidden_size)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.input_proj(x)          # (batch, seq_len, d_model)
 
-    def forward(self, x):
-        seq_len = x.size(1)
-        x = self.embedding(x) + self.positional_encoding[:, :seq_len, :].to(x.device)
-        out = self.transformer(x)
-        last_hidden = out[:, -1, :]
-        price_pred = self.fc(last_hidden)
+        x = self.pos_encoder(x)         # (batch, seq_len, d_model)
+
+        enc_out = self.encoder(x)       # (batch, seq_len, d_model)
+
+        last_hidden = enc_out[:, -1, :]  # (batch, d_model)
+        price_pred = self.fc_out(last_hidden)  # (batch, output_size)
         return price_pred
 
-    def load_model(self, path):
-        state_dict = torch.load(path, map_location=torch.device('cpu'))
+    def load_model(self, path: str):
+        state_dict = torch.load(path, map_location="cpu")
         self.load_state_dict(state_dict)
 
-    def save_model(self, path):
+    def save_model(self, path: str):
         torch.save(self.state_dict(), path)
