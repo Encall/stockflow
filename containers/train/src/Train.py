@@ -1,6 +1,8 @@
 import torch
 import model.LSTM as LSTMModel
 import model.Transformer as TransformerModel
+import model.GRU as GRUModel
+import model.NBERT as NBERTModel
 import StockDataset
 import GetDummies
 
@@ -35,12 +37,13 @@ def main():
     )
     feat_cols = ["Open", "High", "Low", "Volume"]
     target_col = ["Close"]
+    seq_len = 50
 
     stock_data = StockDataset.MultiFeaturePriceDataset(
         data=data,
         feature_cols=feat_cols,
         target_col=target_col,
-        seq_len = 50
+        seq_len = seq_len
     )
 
     dataLoader = torch.utils.data.DataLoader(
@@ -55,17 +58,38 @@ def main():
     #     num_layers=4,
     #     pkl_path=None
     # )
+    
+    # model = GRUModel.GRU(
+    #     input_size=len(feat_cols),
+    #     hidden_size=64,
+    #     num_layers=4,
+    #     output_size=1,
+    #     dropout=0.1,
+    #     bidirectional=False,
+    #     pkl_path=None,
+    # )
 
-    model = TransformerModel.Transformer(
-        input_size=len(feat_cols),   # 4 features
-        d_model=64,
-        nhead=4,
-        num_layers=2,
-        dim_feedforward=128,
-        dropout=0.1,
+    model = NBERTModel.NBERT(
+        input_size=len(feat_cols), 
+        seq_len=seq_len,
         output_size=1,
+        dropout=0.1,
+        hidden_dim=128,
+        n_blocks=3,
+        n_layers=4,
         pkl_path=None,
     )
+
+    # model = TransformerModel.Transformer(
+    #     input_size=len(feat_cols),   # 4 features
+    #     d_model=64,
+    #     nhead=4,
+    #     num_layers=2,
+    #     dim_feedforward=128,
+    #     dropout=0.1,
+    #     output_size=1,
+    #     pkl_path=None,
+    # )
     
 
     trained_model = train_model(
