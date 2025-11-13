@@ -1,0 +1,16 @@
+version: '3'
+
+tasks:
+  build-etl:
+    desc: Build the ETL container image
+    cmds:
+      - docker build -t stockflow:etl ./containers/etl
+
+  build-train:
+    desc: Build the train container image
+    cmds:
+      - docker build -t stockflow:train ./containers/train
+
+  build-all:
+    desc: Build both ETL and train container images
+    deps: [build-etl, build-train]
