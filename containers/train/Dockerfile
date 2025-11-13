@@ -1,20 +1,33 @@
-FROM python:3.10-slim
+# Build stage
+FROM python:3.10-slim-bullseye AS builder
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install build dependencies only in builder stage
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Install uv
+RUN pip install --no-cache-dir uv
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy and install dependencies
+COPY pyproject.toml .
+RUN uv sync --frozen
+
+# Runtime stage
+FROM python:3.10-slim-bullseye
+
+WORKDIR /app
+
+# Copy only the installed dependencies from builder
+COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code
 COPY src/ ./src/
 
-# Run the training pipeline
+# Set PATH to use venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Run the application
 CMD ["python", "src/sample.py"]
