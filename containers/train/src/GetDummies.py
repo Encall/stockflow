@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta
 
-
 def get_dummy(spec: dict, n_rows: int = 10, seed: int | None = None) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     df = pd.DataFrame({"id": np.arange(n_rows)})

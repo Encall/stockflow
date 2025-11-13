@@ -1,7 +1,7 @@
 import torch
 import model.LSTM as LSTMModel
 import StockDataset
-import GetDummies
+import stockflow.containers.train.src.GetDummies as GetDummies
 
 def train_model(model, dataLoader, lr=0.001, epochs=30, loss_fn=torch.nn.MSELoss(), log_interval=10):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -22,7 +22,6 @@ def train_model(model, dataLoader, lr=0.001, epochs=30, loss_fn=torch.nn.MSELoss
     return model
 
 def main():
-
     data = GetDummies.get_dummy(
         spec={
             "Open":"float",
