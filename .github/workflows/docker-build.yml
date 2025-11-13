@@ -48,39 +48,58 @@ jobs:
             train:
               - 'containers/train/**'
 
-  build-and-push:
+build-and-push:
     name: Build and Push ${{ matrix.container }}
     needs: detect-changes
-    # This 'if' condition combines both trigger types:
-    # 1. Runs if the 'detect-changes' job found changes for this specific container.
-    # 2. Runs if it was a manual 'workflow_dispatch' and this container was selected (or 'all').
+    
+    # 1. This is the new, broader job-level 'if'.
+    # It runs the job if *any* container changed OR it's a manual dispatch.
     if: |
-      needs.detect-changes.outputs[matrix.container] == 'true' ||
-      (github.event_name == 'workflow_dispatch' && 
-        (inputs.container == 'all' || inputs.container == matrix.container))
+      needs.detect-changes.outputs.etl == 'true' ||
+      needs.detect-changes.outputs.train == 'true' ||
+      github.event_name == 'workflow_dispatch'
+      
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     
     strategy:
-      fail-fast: false # Ensures one container build failing doesn't stop the other
+      fail-fast: false
       matrix:
         container: [etl, train] # Define the containers to build
 
     steps:
+      # 2. This new step runs your original logic and sets an output
+      - name: Check if build is required
+        id: check
+        run: |
+          if [[ "${{ needs.detect-changes.outputs[matrix.container] }}" == "true" || \
+                ("${{ github.event_name }}" == "workflow_dispatch" && \
+                 ("${{ inputs.container }}" == "all" || "${{ inputs.container }}" == "${{ matrix.container }}")) ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping build for ${{ matrix.container }}..."
+          fi
+        shell: bash
+
       - name: Checkout code
+        # 3. All subsequent steps now check the output of the 'check' step
+        if: steps.check.outputs.should_build == 'true'
         uses: actions/checkout@v4
 
       - name: Set up QEMU
+        if: steps.check.outputs.should_build == 'true'
         uses: docker/setup-qemu-action@v3
       
       - name: Set up Docker Buildx
+        if: steps.check.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
       
       - name: Log in to GitHub Container Registry
-        # Only log in if we're on the main branch and it's a push event
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # This 'if' combines our check *and* the original logic for pushing
+        if: steps.check.outputs.should_build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -89,29 +108,23 @@ jobs:
       
       - name: Extract metadata
         id: meta
+        if: steps.check.outputs.should_build == 'true'
         uses: docker/metadata-action@v5
         with:
-          # Use the matrix variable to set the image name
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.container }}
           tags: |
-            # push to main branch
             type=raw,value=latest,enable={{is_default_branch}}
-            # git tag v1.2.3 -> v1.2.3
             type=semver,pattern={{version}}
-            # branch name
             type=ref,event=branch
-            # PR number
             type=ref,event=pr
-            # short commit sha
             type=sha,prefix=
       
       - name: Build and push ${{ matrix.container }} image
+        if: steps.check.outputs.should_build == 'true'
         uses: docker/build-push-action@v5
         with:
-          # Use the matrix variable to set the build context
           context: containers/${{ matrix.container }}
           platforms: linux/amd64,linux/arm64
-          # Only push on 'main' branch push events
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
