@@ -2,5 +2,8 @@
 name = "etl"
 version = "0.1.0"
 dependencies = [
+    "minio>=7.2.18",
     "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "pyarrow>=22.0.0",
 ]
