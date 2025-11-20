@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """
-Analyze hyperparameter tuning results
-Provides insights and visualizations of tuning experiments
+Analyze hyperparameter tuning results with beautiful formatting
 """
 
 import json
 import os
 from typing import Dict, List, Any
 from collections import defaultdict
+from datetime import datetime
+
+try:
+    import mlflow
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
 
 
 class ResultAnalyzer:
+    """Analyze and visualize hyperparameter tuning results"""
+    
     def __init__(self, results_file: str = "results_final.json"):
-        """Initialize analyzer with results file"""
         self.results_file = results_file
         self.results = []
         self.successful_results = []
@@ -20,260 +27,405 @@ class ResultAnalyzer:
     def load_results(self) -> bool:
         """Load results from JSON file"""
         if not os.path.exists(self.results_file):
-            print(f"❌ Results file not found: {self.results_file}")
+            print(f"\n❌ Results file not found: {self.results_file}")
+            print(f"   Please run hyperparameter tuning first:")
+            print(f"   python run_tuning.py")
             return False
         
         try:
             with open(self.results_file, 'r') as f:
                 self.results = json.load(f)
             
-            # Filter successful results
             self.successful_results = [r for r in self.results if r.get("status") == "success"]
             
-            print(f"✓ Loaded {len(self.results)} results")
-            print(f"✓ {len(self.successful_results)} successful runs")
-            print(f"✓ {len(self.results) - len(self.successful_results)} failed runs")
+            print(f"\n📊 Loaded Results")
+            print(f"{'─'*80}")
+            print(f"   Total runs:      {len(self.results)}")
+            print(f"   ✅ Successful:   {len(self.successful_results)}")
+            print(f"   ❌ Failed:       {len(self.results) - len(self.successful_results)}")
+            
             return True
             
         except Exception as e:
-            print(f"❌ Error loading results: {e}")
+            print(f"\n❌ Error loading results: {e}")
             return False
     
-    def print_summary(self):
-        """Print overall summary"""
+    def print_executive_summary(self):
+        """Print executive summary with key findings"""
         if not self.successful_results:
             print("\n⚠️  No successful results to analyze")
             return
         
         print("\n" + "="*80)
-        print("HYPERPARAMETER TUNING SUMMARY")
+        print("📈 EXECUTIVE SUMMARY")
         print("="*80)
         
-        # Group by model type
-        by_model = defaultdict(list)
-        for result in self.successful_results:
-            by_model[result["model_type"]].append(result)
+        # Overall best model
+        best = min(self.successful_results, key=lambda x: x["best_val_loss"])
         
-        print(f"\nTotal Experiments: {len(self.results)}")
-        print(f"Successful: {len(self.successful_results)}")
-        print(f"Failed: {len(self.results) - len(self.successful_results)}")
+        print(f"\n🏆 BEST OVERALL MODEL")
+        print(f"{'─'*80}")
+        print(f"   Model:           {best['model_type']}")
+        print(f"   Val Loss:        {best['best_val_loss']:.6f}")
+        print(f"   Run ID:          {best.get('run_id', 'N/A')}")
         
-        print("\n" + "-"*80)
-        print("Results by Model Type:")
-        print("-"*80)
-        for model_type, results in by_model.items():
-            best_loss = min(r["best_val_loss"] for r in results)
-            avg_loss = sum(r["best_val_loss"] for r in results) / len(results)
-            print(f"\n{model_type}:")
-            print(f"  - Experiments: {len(results)}")
-            print(f"  - Best Val Loss: {best_loss:.6f}")
-            print(f"  - Average Val Loss: {avg_loss:.6f}")
-    
-    def print_top_n(self, n: int = 10):
-        """Print top N best configurations"""
-        if not self.successful_results:
-            return
+        # Best by stage
+        by_stage = defaultdict(list)
+        for r in self.successful_results:
+            by_stage[r.get('tuning_stage', 'unknown')].append(r)
         
-        # Sort by validation loss
-        sorted_results = sorted(self.successful_results, key=lambda x: x["best_val_loss"])
-        
-        print("\n" + "="*80)
-        print(f"TOP {min(n, len(sorted_results))} BEST CONFIGURATIONS")
-        print("="*80)
-        
-        for idx, result in enumerate(sorted_results[:n]):
-            print(f"\n{'─'*80}")
-            print(f"#{idx+1} - {result['model_type']}")
+        if 'final' in by_stage:
+            print(f"\n🎯 FINAL MODELS COMPARISON")
             print(f"{'─'*80}")
-            print(f"Best Val Loss:    {result['best_val_loss']:.6f}")
-            print(f"Best Epoch:       {result['best_epoch']}")
-            print(f"Run Name:         {result['run_name']}")
-            print(f"Run ID:           {result['run_id']}")
+            final_sorted = sorted(by_stage['final'], key=lambda x: x['best_val_loss'])
+            for idx, result in enumerate(final_sorted, 1):
+                status = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"{idx}."
+                print(f"   {status} {result['model_type']:12s}  Val Loss: {result['best_val_loss']:.6f}")
+        
+        # Best configurations
+        if 'final' in by_stage:
+            best_final = min(by_stage['final'], key=lambda x: x['best_val_loss'])
             
-            print("\nModel Parameters:")
-            for key, value in result['model_params'].items():
-                print(f"  - {key:20s}: {value}")
+            print(f"\n⚙️  OPTIMAL CONFIGURATION")
+            print(f"{'─'*80}")
             
-            print("\nDataset Parameters:")
-            for key, value in result['dataset_params'].items():
-                print(f"  - {key:20s}: {value}")
+            print(f"\n   Dataset:")
+            for key, val in best_final['dataset_params'].items():
+                print(f"      • {key:12s}: {val}")
             
-            print("\nTraining Parameters:")
-            for key, value in result['training_params'].items():
-                print(f"  - {key:20s}: {value}")
+            print(f"\n   Model ({best_final['model_type']}):")
+            for key, val in best_final['model_params'].items():
+                print(f"      • {key:12s}: {val}")
+            
+            print(f"\n   Training:")
+            for key, val in best_final['training_params'].items():
+                print(f"      • {key:12s}: {val}")
     
-    def print_best_by_model(self):
-        """Print best configuration for each model type"""
+    def print_stage_breakdown(self):
+        """Print breakdown by tuning stage"""
         if not self.successful_results:
             return
         
-        # Group by model type
-        by_model = defaultdict(list)
-        for result in self.successful_results:
-            by_model[result["model_type"]].append(result)
+        print("\n" + "="*80)
+        print("🔍 STAGE-BY-STAGE BREAKDOWN")
+        print("="*80)
+        
+        by_stage = defaultdict(list)
+        for r in self.successful_results:
+            stage = r.get('tuning_stage', 'unknown')
+            by_stage[stage].append(r)
+        
+        stage_order = ['stage1_scaler', 'stage2_seq_len', 'stage3', 'stage4', 'final']
+        stage_names = {
+            'stage1_scaler': '1️⃣  Stage 1: Scaler Selection',
+            'stage2_seq_len': '2️⃣  Stage 2: Sequence Length',
+            'stage3': '3️⃣  Stage 3: Model Architecture',
+            'stage4': '4️⃣  Stage 4: Training Optimization',
+            'final': '🎯 Final: Production Models'
+        }
+        
+        for stage_key in stage_order:
+            results = [r for r in self.successful_results 
+                      if r.get('tuning_stage', '').startswith(stage_key.replace('stage3', 'stage3_'))]
+            
+            if results:
+                best = min(results, key=lambda x: x['best_val_loss'])
+                
+                print(f"\n{stage_names.get(stage_key, stage_key)}")
+                print(f"{'─'*80}")
+                print(f"   Experiments:     {len(results)}")
+                print(f"   Best Val Loss:   {best['best_val_loss']:.6f}")
+                
+                if stage_key == 'stage1_scaler':
+                    print(f"   ✅ Best Scaler:  {best['dataset_params']['scaler']}")
+                elif stage_key == 'stage2_seq_len':
+                    print(f"   ✅ Best Seq Len: {best['dataset_params']['seq_len']}")
+                elif stage_key == 'stage3':
+                    print(f"   ✅ Best Model:   {best['model_type']}")
+    
+    def print_model_comparison(self):
+        """Print detailed model comparison"""
+        if not self.successful_results:
+            return
         
         print("\n" + "="*80)
-        print("BEST CONFIGURATION PER MODEL TYPE")
+        print("📊 MODEL PERFORMANCE COMPARISON")
         print("="*80)
+        
+        by_model = defaultdict(list)
+        for r in self.successful_results:
+            by_model[r['model_type']].append(r)
+        
+        # Create comparison table
+        print(f"\n{'Model':<15} {'Runs':>6} {'Best Loss':>12} {'Avg Loss':>12} {'Worst Loss':>12}")
+        print(f"{'─'*15} {'─'*6:>6} {'─'*12:>12} {'─'*12:>12} {'─'*12:>12}")
         
         for model_type in sorted(by_model.keys()):
             results = by_model[model_type]
-            best_result = min(results, key=lambda x: x["best_val_loss"])
+            losses = [r['best_val_loss'] for r in results]
             
-            print(f"\n{'─'*80}")
-            print(f"{model_type}")
-            print(f"{'─'*80}")
-            print(f"Best Val Loss:    {best_result['best_val_loss']:.6f}")
-            print(f"Best Epoch:       {best_result['best_epoch']}")
-            print(f"Run Name:         {best_result['run_name']}")
-            print(f"Run ID:           {best_result['run_id']}")
+            best_loss = min(losses)
+            avg_loss = sum(losses) / len(losses)
+            worst_loss = max(losses)
             
-            print("\nOptimal Configuration:")
-            print("  Model:")
-            for key, value in best_result['model_params'].items():
-                print(f"    - {key:20s}: {value}")
-            
-            print("  Dataset:")
-            for key, value in best_result['dataset_params'].items():
-                print(f"    - {key:20s}: {value}")
-            
-            print("  Training:")
-            for key, value in best_result['training_params'].items():
-                print(f"    - {key:20s}: {value}")
+            print(f"{model_type:<15} {len(results):>6} {best_loss:>12.6f} {avg_loss:>12.6f} {worst_loss:>12.6f}")
     
-    def analyze_hyperparameters(self):
-        """Analyze impact of individual hyperparameters"""
+    def print_hyperparameter_insights(self):
+        """Print insights about hyperparameter impact"""
         if not self.successful_results:
             return
         
         print("\n" + "="*80)
-        print("HYPERPARAMETER IMPACT ANALYSIS")
+        print("💡 HYPERPARAMETER INSIGHTS")
         print("="*80)
         
-        # Group by model type
-        by_model = defaultdict(list)
-        for result in self.successful_results:
-            by_model[result["model_type"]].append(result)
+        # Analyze scaler impact
+        scaler_results = defaultdict(list)
+        for r in self.successful_results:
+            scaler = r.get('dataset_params', {}).get('scaler')
+            if scaler:
+                scaler_results[scaler].append(r['best_val_loss'])
         
-        for model_type, results in by_model.items():
-            print(f"\n{'─'*80}")
-            print(f"{model_type} - Parameter Analysis")
+        if scaler_results:
+            print(f"\n📏 Scaler Impact:")
             print(f"{'─'*80}")
-            
-            # Analyze model parameters
-            self._analyze_param_group(results, "model_params", "Model Parameters")
-            
-            # Analyze dataset parameters
-            self._analyze_param_group(results, "dataset_params", "Dataset Parameters")
-            
-            # Analyze training parameters
-            self._analyze_param_group(results, "training_params", "Training Parameters")
+            for scaler in sorted(scaler_results.keys(), 
+                               key=lambda x: sum(scaler_results[x])/len(scaler_results[x])):
+                losses = scaler_results[scaler]
+                avg = sum(losses) / len(losses)
+                print(f"   {scaler:12s}  Avg Loss: {avg:.6f}  (n={len(losses)})")
+        
+        # Analyze sequence length impact
+        seq_results = defaultdict(list)
+        for r in self.successful_results:
+            seq_len = r.get('dataset_params', {}).get('seq_len')
+            if seq_len:
+                seq_results[seq_len].append(r['best_val_loss'])
+        
+        if seq_results:
+            print(f"\n📊 Sequence Length Impact:")
+            print(f"{'─'*80}")
+            for seq_len in sorted(seq_results.keys(), 
+                                key=lambda x: sum(seq_results[x])/len(seq_results[x])):
+                losses = seq_results[seq_len]
+                avg = sum(losses) / len(losses)
+                print(f"   seq_len={seq_len:3d}   Avg Loss: {avg:.6f}  (n={len(losses)})")
+        
+        # Analyze learning rate impact
+        lr_results = defaultdict(list)
+        for r in self.successful_results:
+            lr = r.get('training_params', {}).get('lr')
+            if lr:
+                lr_results[lr].append(r['best_val_loss'])
+        
+        if lr_results:
+            print(f"\n🎓 Learning Rate Impact:")
+            print(f"{'─'*80}")
+            for lr in sorted(lr_results.keys(), 
+                           key=lambda x: sum(lr_results[x])/len(lr_results[x])):
+                losses = lr_results[lr]
+                avg = sum(losses) / len(losses)
+                print(f"   lr={lr:7.5f}     Avg Loss: {avg:.6f}  (n={len(losses)})")
     
-    def _analyze_param_group(self, results: List[Dict], param_group: str, title: str):
-        """Analyze impact of parameters in a group"""
-        print(f"\n{title}:")
-        
-        # Collect all parameter values
-        param_values = defaultdict(lambda: defaultdict(list))
-        
-        for result in results:
-            params = result.get(param_group, {})
-            for param_name, param_value in params.items():
-                param_values[param_name][param_value].append(result["best_val_loss"])
-        
-        # Calculate statistics for each parameter
-        for param_name, value_dict in sorted(param_values.items()):
-            print(f"\n  {param_name}:")
-            
-            # Sort by average loss
-            value_stats = []
-            for value, losses in value_dict.items():
-                avg_loss = sum(losses) / len(losses)
-                value_stats.append((value, avg_loss, len(losses)))
-            
-            value_stats.sort(key=lambda x: x[1])
-            
-            for value, avg_loss, count in value_stats:
-                print(f"    {str(value):20s}: avg_loss={avg_loss:.6f} (n={count})")
-    
-    def print_failed_runs(self):
-        """Print information about failed runs"""
+    def print_failed_analysis(self):
+        """Print analysis of failed runs"""
         failed_results = [r for r in self.results if r.get("status") == "failed"]
         
         if not failed_results:
-            print("\n✓ No failed runs")
+            print("\n" + "="*80)
+            print("✅ NO FAILED RUNS")
+            print("="*80)
+            print("\n   All experiments completed successfully! 🎉")
             return
         
         print("\n" + "="*80)
-        print(f"FAILED RUNS ({len(failed_results)})")
+        print(f"⚠️  FAILED RUNS ANALYSIS ({len(failed_results)})")
         print("="*80)
         
-        for idx, result in enumerate(failed_results):
-            print(f"\n{idx+1}. {result['model_type']} - {result['run_name']}")
-            if "error" in result:
-                error_lines = result["error"].split("\n")
-                print(f"   Error: {error_lines[0]}")
+        # Group by error type
+        by_error = defaultdict(list)
+        for r in failed_results:
+            error = r.get('error', 'Unknown error')
+            error_type = error.split('\n')[0][:50]  # First line, first 50 chars
+            by_error[error_type].append(r)
+        
+        print(f"\n   Failed by error type:")
+        for error_type, results in by_error.items():
+            print(f"   • {error_type:50s} ({len(results)} runs)")
+        
+        print(f"\n   Recent failures:")
+        for idx, r in enumerate(failed_results[-3:], 1):
+            print(f"   {idx}. {r['model_type']} - {r['run_name']}")
+            if 'error' in r:
+                error_lines = r['error'].split('\n')
+                print(f"      Error: {error_lines[0][:60]}")
+    
+    def save_summary_report(self, output_file: str = "analysis_summary.txt"):
+        """Save analysis summary to text file"""
+        if not self.successful_results:
+            return
+        
+        with open(output_file, 'w') as f:
+            f.write("="*80 + "\n")
+            f.write("HYPERPARAMETER TUNING ANALYSIS REPORT\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("="*80 + "\n\n")
+            
+            # Best model
+            best = min(self.successful_results, key=lambda x: x["best_val_loss"])
+            f.write("BEST MODEL\n")
+            f.write("-"*80 + "\n")
+            f.write(f"Model Type:      {best['model_type']}\n")
+            f.write(f"Val Loss:        {best['best_val_loss']:.6f}\n")
+            f.write(f"Run ID:          {best.get('run_id', 'N/A')}\n")
+            f.write(f"Run Name:        {best['run_name']}\n\n")
+            
+            # Configuration
+            f.write("OPTIMAL CONFIGURATION\n")
+            f.write("-"*80 + "\n")
+            f.write("\nDataset Parameters:\n")
+            for key, val in best['dataset_params'].items():
+                f.write(f"  {key}: {val}\n")
+            
+            f.write("\nModel Parameters:\n")
+            for key, val in best['model_params'].items():
+                f.write(f"  {key}: {val}\n")
+            
+            f.write("\nTraining Parameters:\n")
+            for key, val in best['training_params'].items():
+                f.write(f"  {key}: {val}\n")
+        
+        print(f"\n💾 Summary report saved to: {output_file}")
     
     def save_best_configs(self, output_file: str = "best_configs.json"):
         """Save best configuration for each model type"""
         if not self.successful_results:
-            print("\n⚠️  No successful results to save")
             return
         
-        # Group by model type and get best
         by_model = defaultdict(list)
-        for result in self.successful_results:
-            by_model[result["model_type"]].append(result)
+        for r in self.successful_results:
+            by_model[r['model_type']].append(r)
         
         best_configs = {}
         for model_type, results in by_model.items():
-            best_result = min(results, key=lambda x: x["best_val_loss"])
+            best = min(results, key=lambda x: x['best_val_loss'])
             best_configs[model_type] = {
-                "best_val_loss": best_result["best_val_loss"],
-                "best_epoch": best_result["best_epoch"],
-                "run_id": best_result["run_id"],
-                "run_name": best_result["run_name"],
-                "model_params": best_result["model_params"],
-                "dataset_params": best_result["dataset_params"],
-                "training_params": best_result["training_params"]
+                "best_val_loss": best['best_val_loss'],
+                "best_epoch": best['best_epoch'],
+                "run_id": best.get('run_id'),
+                "run_name": best['run_name'],
+                "model_params": best['model_params'],
+                "dataset_params": best['dataset_params'],
+                "training_params": best['training_params']
             }
         
+        with open(output_file, 'w') as f:
+            json.dump(best_configs, f, indent=2)
+        
+        print(f"💾 Best configs saved to: {output_file}")
+    
+    def log_summary_to_mlflow(self, experiment_name: str = None):
+        """Log analysis summary to MLflow"""
+        if not MLFLOW_AVAILABLE or not self.successful_results:
+            return
+        
         try:
-            with open(output_file, 'w') as f:
-                json.dump(best_configs, f, indent=2)
-            print(f"\n✓ Best configurations saved to {output_file}")
+            # Get experiment name from results
+            if experiment_name is None:
+                experiment_name = "tuning_analysis"
+            
+            mlflow.set_experiment(experiment_name)
+            
+            with mlflow.start_run(run_name=f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
+                # Log overall metrics
+                best = min(self.successful_results, key=lambda x: x["best_val_loss"])
+                mlflow.log_metric("best_val_loss_overall", best['best_val_loss'])
+                mlflow.log_metric("total_runs", len(self.results))
+                mlflow.log_metric("successful_runs", len(self.successful_results))
+                mlflow.log_metric("failed_runs", len(self.results) - len(self.successful_results))
+                
+                # Log best model info
+                mlflow.log_param("best_model_type", best['model_type'])
+                mlflow.log_param("best_run_id", best.get('run_id', 'N/A'))
+                
+                # Log best configs as params
+                for key, val in best['dataset_params'].items():
+                    mlflow.log_param(f"best_dataset_{key}", val)
+                
+                for key, val in best['model_params'].items():
+                    mlflow.log_param(f"best_model_{key}", val)
+                
+                for key, val in best['training_params'].items():
+                    mlflow.log_param(f"best_training_{key}", val)
+                
+                # Log model comparison
+                by_model = defaultdict(list)
+                for r in self.successful_results:
+                    by_model[r['model_type']].append(r['best_val_loss'])
+                
+                for model_type, losses in by_model.items():
+                    mlflow.log_metric(f"{model_type}_best_loss", min(losses))
+                    mlflow.log_metric(f"{model_type}_avg_loss", sum(losses)/len(losses))
+                    mlflow.log_metric(f"{model_type}_worst_loss", max(losses))
+                    mlflow.log_metric(f"{model_type}_num_runs", len(losses))
+                
+                # Save and log artifacts
+                self.save_summary_report("analysis_summary.txt")
+                self.save_best_configs("best_configs.json")
+                mlflow.log_artifact("analysis_summary.txt")
+                mlflow.log_artifact("best_configs.json")
+                mlflow.log_artifact(self.results_file)
+                
+                # Set tags
+                mlflow.set_tag("analysis_type", "hyperparameter_tuning")
+                mlflow.set_tag("best_model", best['model_type'])
+                mlflow.set_tag("timestamp", datetime.now().isoformat())
+                
+                print(f"\n✅ Analysis logged to MLflow experiment: {experiment_name}")
+                
         except Exception as e:
-            print(f"\n❌ Error saving best configs: {e}")
+            print(f"\n⚠️  Could not log to MLflow: {e}")
 
 
 def main():
     """Main analysis function"""
+    
+    print("\n" + "="*80)
+    print("🔬 HYPERPARAMETER TUNING ANALYSIS")
+    print("="*80)
     
     # Initialize analyzer
     analyzer = ResultAnalyzer("results_final.json")
     
     # Load results
     if not analyzer.load_results():
-        print("\n⚠️  Cannot proceed without results file")
-        print("Run hyperparameter tuning first: python run_tuning.py")
         return
     
     # Perform analyses
-    analyzer.print_summary()
-    analyzer.print_top_n(10)
-    analyzer.print_best_by_model()
-    analyzer.analyze_hyperparameters()
-    analyzer.print_failed_runs()
-    analyzer.save_best_configs()
+    analyzer.print_executive_summary()
+    analyzer.print_stage_breakdown()
+    analyzer.print_model_comparison()
+    analyzer.print_hyperparameter_insights()
+    analyzer.print_failed_analysis()
     
+    # Save outputs
     print("\n" + "="*80)
-    print("ANALYSIS COMPLETE")
+    print("💾 SAVING OUTPUTS")
     print("="*80)
-    print("\nNext steps:")
-    print("  1. Review best_configs.json for optimal configurations")
-    print("  2. Check MLflow UI for detailed metrics: http://127.0.0.1:8080")
-    print("  3. Use best model for deployment")
+    analyzer.save_summary_report()
+    analyzer.save_best_configs()
+    analyzer.log_summary_to_mlflow()
+    
+    # Next steps
+    print("\n" + "="*80)
+    print("📋 NEXT STEPS")
     print("="*80)
+    print("\n   1. 📄 Review analysis_summary.txt for detailed report")
+    print("   2. ⚙️  Check best_configs.json for optimal configurations")
+    print("   3. 🔬 View MLflow UI for interactive exploration:")
+    print("      http://127.0.0.1:8080")
+    print("   4. 🚀 Deploy best model to production")
+    print("\n" + "="*80)
 
 
 if __name__ == "__main__":

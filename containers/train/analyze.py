@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 # Now import and run
-from AnalyzeResults import main
+from Hyperparameter.AnalyzeResults import main
 
 if __name__ == "__main__":
     print("Analyzing Hyperparameter Tuning Results...")
