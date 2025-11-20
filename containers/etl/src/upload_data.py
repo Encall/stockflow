@@ -10,7 +10,7 @@ def upload_data(data_dir: str = "../../data/cleaned/", bucket_name: str = "stock
     client = Minio(
         "api.minio.encall.space",
         access_key="REMOVED",
-        secret_key="REMOVED",
+        secret_key="REDACTED",
         region="us-east-1"
     )
     
@@ -47,7 +47,7 @@ def upload_single_file(filename: str, data_dir: str = "../../data/cleaned/", buc
     client = Minio(
         "api.minio.encall.space",
         access_key="REMOVED",
-        secret_key="REMOVED",
+        secret_key="REDACTED",
         region="us-east-1"
     )
     
