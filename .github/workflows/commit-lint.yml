@@ -1,0 +1,22 @@
+name: Commit Lint
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+jobs:
+  commit-lint:
+    # Only run lint when PR is created, reopened, edited OR title changed.
+    if: github.event.action != 'synchronize' || github.event.changes.title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate PR title (Conventional Commits)
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          echo "PR title: $PR_TITLE"
+          if ! echo "$PR_TITLE" | grep -Eq '^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: .+'; then
+            echo "❌ Invalid PR title"
+            exit 1
+          fi
