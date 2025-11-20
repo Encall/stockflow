@@ -30,8 +30,8 @@ class ResultSavers:
         sys.stdout = old_stdout
         summary_text = buffer.getvalue()
         
-        # Save to file
-        with open(output_file, 'w') as f:
+        # Save to file with UTF-8 encoding
+        with open(output_file, 'w', encoding='utf-8') as f:
             f.write(summary_text)
         
         print(f"\n📄 Summary report saved to: {output_file}")
