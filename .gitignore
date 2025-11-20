@@ -170,5 +170,10 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+#mlflow server
+mlruns/
+mlartifacts/
+saved_models/
+
 # data files
 data/
