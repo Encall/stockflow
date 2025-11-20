@@ -1,9 +1,14 @@
 """
 Core HyperparameterTuner class for training models with different configurations
 """
+import sys
+import os
+
+# Add src directory to path for imports  
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 import torch
 import torch.nn as nn
-import os
 import json
 import traceback
 import pickle
