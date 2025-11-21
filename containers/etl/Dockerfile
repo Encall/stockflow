@@ -30,4 +30,4 @@ COPY src/ ./src/
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Run the application
-CMD ["python", "src/sample.py"]
+CMD ["python", "src/etl.py"]
