@@ -37,11 +37,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Detect changed paths
         uses: dorny/paths-filter@v3
         id: filter
         with:
+          # Compare changes against main for all events (avoids missing 'before' payload)
+          base: 'refs/heads/main'
+          # make sure enough history is fetched when searching for merge-base
+          initial-fetch-depth: '200'
           filters: |
             etl:
               - 'containers/etl/**'
@@ -128,15 +134,35 @@ jobs:
           if: steps.check.outputs.should_build == 'true'
           run: |
             TAGS="${{ steps.meta.outputs.tags }}"
-            # prefer a pure-hex SHA (7-40 chars), fallback to any tag containing 'sha'
-            SHA=$(echo "$TAGS" | tr ',' '\n' | grep -E '^[0-9a-f]{7,40}$' | head -n1 || true)
+            # TAGS are full image refs like ghcr.io/owner/repo/image:tag
+            # extract the tag part after the last ':' and search for a hex SHA
+            SHA=""
+            echo "$TAGS" | tr ',' '\n' | while read -r full; do
+              tag_only=$(echo "$full" | awk -F':' '{print $NF}')
+              if echo "$tag_only" | grep -Eiq '^[0-9a-f]{7,40}$'; then
+                SHA="$tag_only"
+                break
+              fi
+            done
+
             if [ -z "$SHA" ]; then
-              SHA=$(echo "$TAGS" | tr ',' '\n' | grep -i 'sha' | sed -E 's/^sha[:\-]*//I' | head -n1 || true)
+              # fallback: look for any tag that includes the string 'sha' and extract hex
+              SHA=$(echo "$TAGS" | tr ',' '\n' | awk -F':' '{print $NF}' | grep -i 'sha' | sed -E 's/.*([0-9a-f]{7,40}).*/\1/I' | head -n1 || true)
             fi
+
             if [ -z "$SHA" ]; then
-              echo "error: couldn't find a SHA tag from metadata: $TAGS" >&2
+              # final fallback: use workflow commit SHA
+              echo "warning: couldn't find SHA-like tag in metadata; falling back to GITHUB_SHA"
+              SHA=${GITHUB_SHA}
+              # shorten to 40 or 7 chars depending on usage below
+              SHA=$(echo "$SHA" | sed -E 's/^([0-9a-f]{7,40}).*/\1/')
+            fi
+
+            if [ -z "$SHA" ]; then
+              echo "error: couldn't determine a SHA tag from metadata (TAGS: $TAGS) and GITHUB_SHA is empty" >&2
               exit 1
             fi
+
             echo "sha=$SHA" >> "$GITHUB_OUTPUT"
         
         - name: Build and push SHA-tagged image
