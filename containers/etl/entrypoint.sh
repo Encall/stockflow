@@ -15,6 +15,10 @@ fi
 shift  # remove first arg (the subcommand), keep the rest as extra args
 
 case "$cmd" in
+  bronze)
+    echo "[ENTRYPOINT] Running BRONZE with LOCAL_DATA_DIR=$LOCAL_DATA_DIR"
+    exec python src/bronze.py --local_data_dir "$LOCAL_DATA_DIR" "$@"
+    ;;
   silver)
     echo "[ENTRYPOINT] Running SILVER with LOCAL_DATA_DIR=$LOCAL_DATA_DIR"
     exec python src/silver.py --local_data_dir "$LOCAL_DATA_DIR" "$@"
