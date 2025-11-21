@@ -23,7 +23,6 @@ case "$cmd" in
     echo "[ENTRYPOINT] Running GOLD with LOCAL_DATA_DIR=$LOCAL_DATA_DIR"
     exec python src/gold.py --local_data_dir "$LOCAL_DATA_DIR"  "$@"
     ;;
-  
   *)
     echo "Unknown command: $cmd"
     echo "Usage: {silver|gold} [extra args...]"
