@@ -11,7 +11,7 @@ import torch
 from Hyperparameter.HyperparameterTuner import HyperparameterTuner
 from Hyperparameter.StagedTuning import StagedTuning
 from Hyperparameter.HyperparameterConfig import DATASET_PARAMS
-import GetDummies
+import DataLoader
 
 
 def quick_test():
@@ -21,12 +21,15 @@ def quick_test():
     print("QUICK TEST - Single Configuration")
     print("="*80)
     
-    # Generate test data
-    print("\n1. Generating test data (500 rows)...")
-    data = GetDummies.get_dummy(
-        spec={"Open": "float", "High": "float", "Low": "float", "Close": "float", "Volume": "int"},
-        n_rows=500
-    )
+    # Load real data
+    print("\n1. Loading data from MinIO...")
+    data_loader = DataLoader.DataLoader("DIG")
+    data = data_loader.get_data()
+    
+    if data is None:
+        print("   ❌ Failed to load data")
+        return False
+    
     print(f"   ✓ Data shape: {data.shape}")
     
     # Initialize tuner
@@ -49,8 +52,8 @@ def quick_test():
         dataset_params=config["dataset_params"],
         training_params=config["training_params"],
         data=data,
-        feature_cols=["Open", "High", "Low", "Volume"],
-        target_col="Close",
+        feature_cols=["open", "high", "low", "volume"],
+        target_col="close",
         device=device,
         stage="test"
     )
@@ -62,13 +65,15 @@ def quick_test():
         print(f"   - Val Loss: {result['best_val_loss']:.6f}")
         print(f"   - Best Epoch: {result['best_epoch']}")
         
-        with open("test_result.json", 'w') as f:
-            json.dump(result, f, indent=2)
-        print("\n   💾 Saved to: test_result.json")
+        # Save result
+        with open("test_quick.json", 'w') as f:
+            json.dump([result], f, indent=2)
+        print("\n   💾 Saved to: test_quick.json")
+        
         return True
     else:
         print("   ❌ Test FAILED!")
-        print(f"   - Error: {result.get('error', 'Unknown')}")
+        print(f"   - Error: {result.get('error', 'Unknown error')}")
         return False
 
 
@@ -79,12 +84,15 @@ def test_stage1():
     print("STAGE 1 TEST - Scaler Selection (2 scalers)")
     print("="*80)
     
-    # Generate test data
-    print("\n1. Generating test data (500 rows)...")
-    data = src.GetDummies.get_dummy(
-        spec={"Open": "float", "High": "float", "Low": "float", "Close": "float", "Volume": "int"},
-        n_rows=500
-    )
+    # Load real data
+    print("\n1. Loading data from MinIO...")
+    data_loader = DataLoader.DataLoader("DIG")
+    data = data_loader.get_data()
+    
+    if data is None:
+        print("   ❌ Failed to load data")
+        return False
+    
     print(f"   ✓ Data shape: {data.shape}")
     
     # Initialize
@@ -102,8 +110,8 @@ def test_stage1():
     try:
         best_scaler, results = staged.stage1_find_best_scaler(
             data, 
-            ["Open", "High", "Low", "Volume"], 
-            "Close", 
+            ["open", "high", "low", "volume"], 
+            "close", 
             device
         )
         
@@ -147,12 +155,15 @@ def test_mini_staged():
     print("MINI STAGED TEST - Stage 1 & 2 (Limited)")
     print("="*80)
     
-    # Generate test data
-    print("\n1. Generating test data (500 rows)...")
-    data = src.GetDummies.get_dummy(
-        spec={"Open": "float", "High": "float", "Low": "float", "Close": "float", "Volume": "int"},
-        n_rows=500
-    )
+    # Load real data
+    print("\n1. Loading data from MinIO...")
+    data_loader = DataLoader.DataLoader("DIG")
+    data = data_loader.get_data()
+    
+    if data is None:
+        print("   ❌ Failed to load data")
+        return False
+    
     print(f"   ✓ Data shape: {data.shape}")
     
     # Initialize
@@ -160,8 +171,8 @@ def test_mini_staged():
     tuner = HyperparameterTuner(use_mlflow=False)
     staged = StagedTuning(tuner)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    feature_cols = ["Open", "High", "Low", "Volume"]
-    target_col = "Close"
+    feature_cols = ["open", "high", "low", "volume"]
+    target_col = "close"
     print(f"   ✓ Device: {device}")
     
     # Limit options for quick test
@@ -232,90 +243,91 @@ def print_menu():
 def main():
     """Main test runner"""
     
-    print_menu()
+    # Check if real data is available
+    print("\n🔍 Checking data availability...")
+    data_loader = DataLoader.DataLoader("DIG")
+    data = data_loader.get_data()
     
-    # Get choice
+    if data is None:
+        print("❌ Cannot load data from MinIO.")
+        print("\nPlease ensure:")
+        print("  1. MinIO is running and accessible")
+        print("  2. Gold layer data exists in MinIO")
+        print("  3. .env file has correct MinIO credentials")
+        return 1
+    
+    print(f"✅ Data available: {data.shape}")
+    print(f"   Columns: {list(data.columns)}")
+    
     if len(sys.argv) > 1:
         choice = sys.argv[1]
     else:
-        choice = input("\nSelect test (1/2/3/4) [default: 1]: ").strip() or "1"
+        print_menu()
+        choice = input("\nEnter test number (1-4): ").strip()
     
-    try:
-        results = []
+    results = []
+    
+    if choice == "1":
+        print("\n▶️  Running Quick Test...")
+        results.append(("Quick Test", quick_test()))
         
-        # Run selected tests
-        if choice in ["1", "4"]:
-            print("\n" + "="*80)
-            print("RUNNING: Quick Test")
-            print("="*80)
-            results.append(("Quick Test", quick_test()))
+    elif choice == "2":
+        print("\n▶️  Running Stage 1 Test...")
+        results.append(("Stage 1", test_stage1()))
         
-        if choice in ["2", "4"]:
-            print("\n" + "="*80)
-            print("RUNNING: Stage 1 Test")
-            print("="*80)
-            results.append(("Stage 1 Test", test_stage1()))
+    elif choice == "3":
+        print("\n▶️  Running Mini Staged Test...")
+        results.append(("Mini Staged", test_mini_staged()))
         
-        if choice in ["3", "4"]:
-            print("\n" + "="*80)
-            print("RUNNING: Mini Staged Test")
-            print("="*80)
-            results.append(("Mini Staged", test_mini_staged()))
+    elif choice == "4":
+        print("\n▶️  Running All Tests...")
+        results.append(("Quick Test", quick_test()))
+        results.append(("Stage 1", test_stage1()))
+        results.append(("Mini Staged", test_mini_staged()))
         
-        # Summary
-        print("\n" + "="*80)
-        print("TEST SUMMARY")
-        print("="*80)
-        
-        all_passed = all(result[1] for result in results)
-        
-        for test_name, passed in results:
-            status = "✅ PASSED" if passed else "❌ FAILED"
-            print(f"  {status:12s} - {test_name}")
-        
-        if all_passed:
-            print("\n🎉 All tests completed successfully!")
-            print("\n📁 Generated files:")
-            if choice in ["1", "4"]:
-                print("  • test_result.json")
-            if choice in ["2", "4"]:
-                print("  • test_stage1.json")
-            if choice in ["3", "4"]:
-                print("  • test_mini_staged.json")
-            
-            print("\n🚀 Next steps:")
-            print("  1. Review test result files")
-            print("  2. Run full staged tuning:")
-            print("     python run_tuning.py")
-            print("  3. Analyze results:")
-            print("     python analyze.py")
-            
-            print("\n📊 Full tuning will perform:")
-            print("  • Stage 1: Best scaler (5 runs)")
-            print("  • Stage 2: Best seq_len (5 runs)")
-            print("  • Stage 3: Best model params (~20-30 runs/model)")
-            print("  • Stage 4: Best training params (~15 runs)")
-            print("  • Final: All models with best configs (4 runs)")
-            print("  • Total: ~50-60 runs (vs 384,000 with full grid!)")
-        else:
-            print("\n⚠️  Some tests failed")
-            print("\nTroubleshooting:")
-            print("  1. Check dependencies are installed")
-            print("  2. Verify model files exist in src/model/")
-            print("  3. Ensure PyTorch and sklearn are working")
-        
-        print("="*80)
-        
-        return 0 if all_passed else 1
-        
-    except KeyboardInterrupt:
-        print("\n\n⚠️  Tests interrupted by user")
+    else:
+        print(f"\n❌ Invalid choice: {choice}")
         return 1
-    except Exception as e:
-        print(f"\n❌ UNEXPECTED ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
+    
+    # Summary
+    print("\n" + "="*80)
+    print("TEST SUMMARY")
+    print("="*80)
+    
+    for test_name, passed in results:
+        status = "✅ PASSED" if passed else "❌ FAILED"
+        print(f"{test_name:20s} {status}")
+    
+    all_passed = all(passed for _, passed in results)
+    
+    if all_passed:
+        print("\n✅ All tests passed!")
+        print("\nYou can now run the full hyperparameter tuning:")
+        print("  1. Set MLflow URI in environment:")
+        print("     export MLFLOW_TRACKING_URI=http://localhost:5000")
+        print("  2. Run full tuning:")
+        print("     python run_tuning.py")
+        print("  3. Analyze results:")
+        print("     python analyze.py")
+        
+        print("\n📊 Full tuning will perform:")
+        print("  • Stage 1: Best scaler (5 runs)")
+        print("  • Stage 2: Best seq_len (5 runs)")
+        print("  • Stage 3: Best model params (~20-30 runs/model)")
+        print("  • Stage 4: Best training params (~15 runs)")
+        print("  • Final: All models with best configs (4 runs)")
+        print("  • Total: ~50-60 runs (vs 384,000 with full grid!)")
+    else:
+        print("\n⚠️  Some tests failed")
+        print("\nTroubleshooting:")
+        print("  1. Check dependencies are installed")
+        print("  2. Verify model files exist in src/model/")
+        print("  3. Ensure PyTorch and sklearn are working")
+        print("  4. Verify MinIO connection and data availability")
+    
+    print("="*80)
+    
+    return 0 if all_passed else 1
 
 
 if __name__ == "__main__":

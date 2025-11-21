@@ -1,5 +1,5 @@
 import os
-import GetDummies
+import DataLoader  
 from Hyperparameter.HyperparameterTuner import HyperparameterTuner
 from Hyperparameter.StagedTuning import StagedTuning
 
@@ -19,23 +19,29 @@ def main():
     print(f"  Tracking URI: {mlflow_uri}")
     print(f"  Use MLflow: {use_mlflow}")
     
-    # Generate dummy data for testing
-    print("\nGenerating dummy data...")
-    data = GetDummies.get_dummy(
-        spec={
-            "Open": "float",
-            "High": "float",
-            "Low": "float",
-            "Close": "float",
-            "Volume": "int"
-        },
-        n_rows=1000
-    )
-    print(f"Data shape: {data.shape}")
+    # Load real data from MinIO using DataLoader
+    print("\nLoading data from MinIO...")
+    data_loader = DataLoader.DataLoader("DIG")
+    data = data_loader.get_data()
     
-    # Define features and target
-    feature_cols = ["Open", "High", "Low", "Volume"]
-    target_col = "Close"
+    if data is None:
+        print("❌ Failed to load data from DataLoader.")
+        return
+    
+    print(f"✅ Data loaded successfully")
+    print(f"   Data shape: {data.shape}")
+    print(f"   Columns: {list(data.columns)}")
+    
+    # Define features and target (using actual column names from gold layer)
+    feature_cols = ["open", "high", "low", "volume"]
+    target_col = "close"
+    
+    # Check if required columns exist
+    missing_cols = [col for col in feature_cols + [target_col] if col not in data.columns]
+    if missing_cols:
+        print(f"❌ Missing required columns: {missing_cols}")
+        print(f"   Available columns: {list(data.columns)}")
+        return
     
     # Initialize tuner
     print(f"\nInitializing hyperparameter tuner...")
@@ -76,18 +82,10 @@ def main():
     print("="*80)
     print(f"\nResults saved to JSON files in current directory")
     print(f"Total runs completed: {len(results)}")
-    
-    # Show quick summary of best models
-    successful = [r for r in results if r["status"] == "success"]
-    if successful:
-        final_runs = [r for r in successful if r.get("tuning_stage") == "final"]
-        if final_runs:
-            print("\n" + "-"*80)
-            print("BEST MODELS (Final Training):")
-            print("-"*80)
-            sorted_final = sorted(final_runs, key=lambda x: x["best_val_loss"])
-            for idx, result in enumerate(sorted_final, 1):
-                print(f"{idx}. {result['model_type']}: {result['best_val_loss']:.6f}")
+    print(f"\nNext steps:")
+    print(f"  1. Review results: results_final.json")
+    print(f"  2. Run analysis: python analyze.py")
+    print(f"  3. Check MLflow UI for detailed tracking")
 
 
 if __name__ == "__main__":
