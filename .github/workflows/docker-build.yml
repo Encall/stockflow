@@ -219,7 +219,12 @@ jobs:
             echo "Promoting verified SHA ($SHA_TAG) to tags:"
             echo "$ALL_TAGS" | tr ',' '\n' | while read -r tag; do
               [ -z "$tag" ] && continue
-              if [ "$tag" = "$SHA_TAG" ]; then continue; fi
-              echo " - $tag"
-              docker buildx imagetools create -t ghcr.io/${REPO}:$tag ghcr.io/${REPO}:$SHA_TAG || { echo "promotion failed for $tag"; exit 1; }
+              # meta may return full image refs (eg ghcr.io/owner/repo/image:tag).
+              # extract the tag part after the last ':' to avoid duplicating the repo
+              tag_only=$(echo "$tag" | awk -F':' '{print $NF}')
+              if [ -z "$tag_only" ] || [ "$tag_only" = "$SHA_TAG" ]; then
+                continue
+              fi
+              echo " - $tag_only"
+              docker buildx imagetools create -t ghcr.io/${REPO}:$tag_only ghcr.io/${REPO}:$SHA_TAG || { echo "promotion failed for $tag_only"; exit 1; }
             done
