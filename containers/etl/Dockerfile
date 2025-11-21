@@ -29,5 +29,8 @@ COPY src/ ./src/
 # Set PATH to use venv
 ENV PATH="/app/.venv/bin:$PATH"
 
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Run the application
-CMD ["python", "src/etl.py"]
+ENTRYPOINT ["/entrypoint.sh"]
