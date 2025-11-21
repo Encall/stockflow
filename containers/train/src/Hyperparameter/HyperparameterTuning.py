@@ -1,7 +1,7 @@
 import os
 import GetDummies
-from src.Hyperparameter.HyperparameterTuner import HyperparameterTuner
-from src.Hyperparameter.StagedTuning import StagedTuning
+from Hyperparameter.HyperparameterTuner import HyperparameterTuner
+from Hyperparameter.StagedTuning import StagedTuning
 
 
 def main():
