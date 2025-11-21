@@ -21,9 +21,9 @@ class MinioHandler:
         )
         self.bucket_name = "stockflow"
 
-    def download_data(self, local_data_dir: str) -> list:
-        """Downloads all data from the 'raw/' prefix in the bucket."""
-        bronze_dir = os.path.join(local_data_dir, "bronze")
+    def download_data(self, local_data_dir: str, prefix: str = "raw/", level_dir: str = "bronze") -> list:
+        """Downloads all data from the specified prefix in the bucket."""
+        target_dir = os.path.join(local_data_dir, level_dir)
         downloaded_files = []
 
         try:
@@ -31,15 +31,15 @@ class MinioHandler:
                 print(f"Bucket '{self.bucket_name}' not found.")
                 return downloaded_files
 
-            objects = self.client.list_objects(self.bucket_name, prefix="raw/", recursive=True)
+            objects = self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True)
             for obj in objects:
                 try:
                     filename = os.path.basename(obj.object_name)
                     if not filename:
                         continue
 
-                    local_path = os.path.join(bronze_dir, filename)
-                    os.makedirs(bronze_dir, exist_ok=True)
+                    local_path = os.path.join(target_dir, filename)
+                    os.makedirs(target_dir, exist_ok=True)
                     
                     self.client.fget_object(self.bucket_name, obj.object_name, local_path)
                     downloaded_files.append(filename)

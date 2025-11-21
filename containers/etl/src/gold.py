@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from typing import List
 import os
+import argparse
+import minio_handler as MinioHandler
 
 class GoldProcessor:
     """Processes the gold data layer, creating features and technical indicators."""
@@ -9,10 +11,8 @@ class GoldProcessor:
     def __init__(self, local_data_dir: str):
         """Initializes the GoldProcessor."""
         self.local_data_dir = local_data_dir
-        self.silver_dir = os.path.join(local_data_dir, "silver", "csv")
-        self.gold_csv_dir = os.path.join(local_data_dir, "gold", "csv")
+        self.silver_dir = os.path.join(local_data_dir, "silver", "parquet")
         self.gold_parquet_dir = os.path.join(local_data_dir, "gold", "parquet")
-        os.makedirs(self.gold_csv_dir, exist_ok=True)
         os.makedirs(self.gold_parquet_dir, exist_ok=True)
 
     def _calculate_rsi(self, series: pd.Series, period: int = 14) -> pd.Series:
@@ -84,32 +84,28 @@ class GoldProcessor:
 
     def process_files(self):
         """
-        Reads all CSV files from the silver directory, creates gold features,
+        Reads all parquet files from the silver directory, creates gold features,
         and saves them to the gold directory.
         """
         results = {}
         try:
-            file_list = [f for f in os.listdir(self.silver_dir) if f.endswith('.csv')]
+            file_list = [f for f in os.listdir(self.silver_dir) if f.endswith('.parquet')]
         except FileNotFoundError:
-            print(f"❌ Silver CSV directory not found at {self.silver_dir}")
-            return {"status": "failed", "error": "Silver CSV directory not found"}
+            print(f"❌ Silver parquet directory not found at {self.silver_dir}")
+            return {"status": "failed", "error": "Silver parquet directory not found"}
 
         print(f"Found {len(file_list)} files in silver directory.")
 
         for filename in file_list:
             try:
                 silver_path = os.path.join(self.silver_dir, filename)
-                df_silver = pd.read_csv(silver_path)
+                df_silver = pd.read_parquet(silver_path)
                 df_gold = self.create_gold_features(df_silver)
                 
-                parquet_filename = filename.replace(".csv", ".parquet")
-                gold_csv_path = os.path.join(self.gold_csv_dir, filename)
-                gold_parquet_path = os.path.join(self.gold_parquet_dir, parquet_filename)
-
-                df_gold.to_csv(gold_csv_path, index=False)
+                gold_parquet_path = os.path.join(self.gold_parquet_dir, filename)
                 df_gold.to_parquet(gold_parquet_path, index=False)
                 
-                results[filename] = {"status": "success", "path": gold_csv_path}
+                results[filename] = {"status": "success", "path": gold_parquet_path}
             except Exception as e:
                 results[filename] = {"status": "failed", "error": str(e)}
         return results
@@ -121,3 +117,23 @@ def create_all_gold_files(local_data_dir: str):
     processor = GoldProcessor(local_data_dir)
     return processor.process_files()
 
+if __name__ == "__main__":
+    minio_handler = MinioHandler.MinioHandler()
+
+    parser = argparse.ArgumentParser(description="Process gold layer files.")
+    parser.add_argument("--local_data_dir", type=str, required=True, help="Path to local data directory")
+    args = parser.parse_args()
+
+    print(f"Downloading silver files for gold processing...")
+    file_names = minio_handler.download_data(
+        local_data_dir=args.local_data_dir, 
+        prefix="silver/parquet/",  # Download from silver parquet files
+        level_dir="silver/parquet"  # Save to silver/parquet directory
+    )
+    print(f"Downloaded {len(file_names)} silver files")
+    
+    create_all_gold_files(local_data_dir=args.local_data_dir)
+    print("Gold layer processing completed.")
+    
+    minio_handler.upload_data(local_data_dir=args.local_data_dir, layer="gold")
+    print("Gold layer upload completed.")
