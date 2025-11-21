@@ -30,7 +30,8 @@ COPY src/ ./src/
 ENV PATH="/app/.venv/bin:$PATH"
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Convert Windows line endings (CRLF) to Unix (LF) if present, then make executable
+RUN sed -i 's/\r$//' /entrypoint.sh 2>/dev/null || true && chmod +x /entrypoint.sh
 
 # Run the application
 ENTRYPOINT ["/entrypoint.sh"]
