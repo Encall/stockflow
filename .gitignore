@@ -174,3 +174,6 @@ pyrightconfig.json
 mlruns/
 mlartifacts/
 saved_models/
+
+# data files
+data/
