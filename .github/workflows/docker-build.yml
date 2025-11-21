@@ -116,12 +116,19 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
         
+        - name: Prepare lowercased repo name
+          id: repo
+          if: steps.check.outputs.should_build == 'true'
+          run: |
+            repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            echo "repo_lower=$repo_lower" >> "$GITHUB_OUTPUT"
+
         - name: Extract metadata
           id: meta
           if: steps.check.outputs.should_build == 'true'
           uses: docker/metadata-action@v5
           with:
-            images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.container }}
+            images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.repo_lower }}/${{ matrix.container }}
             tags: |
               type=raw,value=latest,enable={{is_default_branch}}
               type=semver,pattern={{version}}
@@ -173,7 +180,7 @@ jobs:
             context: containers/${{ matrix.container }}
             platforms: linux/amd64,linux/arm64
             push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-            tags: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.container }}:${{ steps.get_sha.outputs.sha }}
+            tags: ${{ env.REGISTRY }}/${{ steps.repo.outputs.repo_lower }}/${{ matrix.container }}:${{ steps.get_sha.outputs.sha }}
             labels: ${{ steps.meta.outputs.labels }}
             cache-from: type=gha
             cache-to: type=gha,mode=max
@@ -183,7 +190,7 @@ jobs:
           run: |
             set -euo pipefail
             apt-get update -y && apt-get install -y jq curl
-            REPO="${{ github.repository }}/${{ matrix.container }}"
+            REPO=$(echo "${{ github.repository }}/${{ matrix.container }}" | tr '[:upper:]' '[:lower:]')
             SHA_TAG="${{ steps.get_sha.outputs.sha }}"
 
             echo "Inspecting manifest for ghcr.io/$REPO:$SHA_TAG"
@@ -205,7 +212,7 @@ jobs:
           if: steps.check.outputs.should_build == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
           run: |
             set -euo pipefail
-            REPO="${{ github.repository }}/${{ matrix.container }}"
+            REPO=$(echo "${{ github.repository }}/${{ matrix.container }}" | tr '[:upper:]' '[:lower:]')
             ALL_TAGS="${{ steps.meta.outputs.tags }}"
             SHA_TAG="${{ steps.get_sha.outputs.sha }}"
 
