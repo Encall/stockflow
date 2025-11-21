@@ -41,7 +41,7 @@ with DAG(
         tty=True,
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
-        commands=["silver"]
+        command=["silver"]
     )
     gold_container = DockerOperator(
         task_id="run_gold_container",
@@ -51,7 +51,7 @@ with DAG(
         tty=True,
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
-        commands=["gold"]
+        command=["gold"]
     )
 
     end = EmptyOperator(task_id="end")
