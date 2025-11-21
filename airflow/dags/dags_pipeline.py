@@ -41,6 +41,7 @@ with DAG(
         tty=True,
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
+        force_pull=True,
         command="silver"
     )
     gold_container = DockerOperator(
@@ -49,8 +50,9 @@ with DAG(
         api_version="auto",
         auto_remove="success",
         tty=True,
-        docker_url="unix://var/run/docsker.sock",
+        docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
+        force_pull=True,
         command="gold"
     )
 
