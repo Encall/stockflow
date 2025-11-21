@@ -34,7 +34,7 @@ with DAG(
 
     # pull container image from ghcr.io and run the process
     silver_container = DockerOperator(
-        task_id="run_etl_container",
+        task_id="run_etl_silver_layer",
         image="ghcr.io/encall/stockflow/etl:latest",
         api_version="auto",
         auto_remove="success",
@@ -44,8 +44,9 @@ with DAG(
         force_pull=True,
         command="silver"
     )
+    
     gold_container = DockerOperator(
-        task_id="run_gold_container",
+        task_id="run_etl_gold_layer",
         image="ghcr.io/encall/stockflow/etl:latest",
         api_version="auto",
         auto_remove="success",
