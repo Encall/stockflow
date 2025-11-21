@@ -51,9 +51,10 @@ TRANSFORMER_PARAMS = {
 # Training hyperparameters
 TRAINING_PARAMS = {
     "lr": [0.0001, 0.0005, 0.001, 0.005, 0.01],
-    "epochs": [30, 50, 100],
+    "epochs": [30],
     "batch_size": [16, 32, 64, 128],
-    "loss_fn": ["MSE", "MAE", "Huber"]
+    "loss_fn": ["MSE", "MAE", "Huber"],
+    "patience": [5, 7]
 }
 
 MODEL_PARAMS = {
@@ -73,7 +74,8 @@ DEFAULT_TRAINING_CONFIG = {
     "lr": 0.001,
     "epochs": 30,
     "batch_size": 32,
-    "loss_fn": "MSE"
+    "loss_fn": "MSE",
+    "patience": 5
 }
 
 # Get default model configs (first value of each parameter)

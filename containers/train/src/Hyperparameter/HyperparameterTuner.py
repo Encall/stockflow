@@ -35,7 +35,7 @@ from Hyperparameter.HyperparameterConfig import SCALER_OPTIONS
 class HyperparameterTuner:
     """Main tuner class for training and evaluating models"""
     
-    def __init__(self, mlflow_tracking_uri: str = "http://127.0.0.1:8080", use_mlflow: bool = False):
+    def __init__(self, mlflow_tracking_uri, use_mlflow: bool = False):
         """Initialize hyperparameter tuner with optional MLflow tracking"""
         self.use_mlflow = use_mlflow and MLFLOW_AVAILABLE
         if self.use_mlflow:
@@ -140,11 +140,10 @@ class HyperparameterTuner:
         
         return train_loader, val_loader, seq_len
     
-    def _train_loop(self, model, train_loader, val_loader, optimizer, loss_fn, device, epochs: int):
+    def _train_loop(self, model, train_loader, val_loader, optimizer, loss_fn, device, epochs: int, patience: int = 5):
         """Main training loop with early stopping"""
         best_val_loss = float('inf')
         best_epoch = 0
-        patience = 10
         patience_counter = 0
         
         for epoch in range(epochs):
@@ -155,18 +154,19 @@ class HyperparameterTuner:
                 mlflow.log_metric("train_loss", train_loss, step=epoch)
                 mlflow.log_metric("val_loss", val_loss, step=epoch)
             
-            print(f"Epoch {epoch+1}/{epochs} - Train: {train_loss:.4f}, Val: {val_loss:.4f}")
-            
-            # Early stopping
+            # Track best validation loss
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_epoch = epoch
-                patience_counter = 0
+                patience_counter = 0  # Reset counter on improvement
             else:
                 patience_counter += 1
-                if patience_counter >= patience:
-                    print(f"Early stopping at epoch {epoch+1}")
-                    break
+            
+            # Early stopping
+            if patience_counter >= patience:
+                print(f"\n   Early stopping triggered at epoch {epoch}")
+                print(f"   Best val loss: {best_val_loss:.6f} at epoch {best_epoch}")
+                break
         
         return best_val_loss, best_epoch, epoch + 1
     
@@ -182,7 +182,9 @@ class HyperparameterTuner:
         os.makedirs(model_dir, exist_ok=True)
         
         # Log PyTorch model
-        mlflow.pytorch.log_model(model, "model")
+        print(f'model type {type(model)}')
+        mlflow.pytorch.log_model(
+            pytorch_model=model, artifact_path="model")
         
         # Save state dict
         model_pth_path = f"{model_dir}/{run_name}_best_model.pth"
@@ -281,7 +283,9 @@ class HyperparameterTuner:
             
             # Train
             best_val_loss, best_epoch, total_epochs = self._train_loop(
-                model, train_loader, val_loader, optimizer, loss_fn, device, training_params["epochs"]
+                model, train_loader, val_loader, optimizer, loss_fn, device, 
+                training_params["epochs"], 
+                patience=training_params.get("patience", 5)
             )
             
             # Get final losses

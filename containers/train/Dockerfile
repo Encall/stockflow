@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.10-slim-bullseye AS builder
+FROM python:3.11-slim-bullseye AS builder
 
 WORKDIR /app
 
@@ -13,10 +13,10 @@ RUN pip install --no-cache-dir uv
 
 # Copy and install dependencies
 COPY pyproject.toml .
-RUN uv sync --frozen
+RUN uv sync
 
 # Runtime stage
-FROM python:3.10-slim-bullseye
+FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
@@ -26,8 +26,8 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application code
 COPY src/ ./src/
 
-# Set PATH to use venv
+# Set PATH to use venv and suppress Git warnings
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Run the application
-CMD ["python", "src/sample.py"]
+CMD ["python", "src/run_tuning.py"]
