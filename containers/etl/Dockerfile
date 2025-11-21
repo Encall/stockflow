@@ -29,5 +29,9 @@ COPY src/ ./src/
 # Set PATH to use venv
 ENV PATH="/app/.venv/bin:$PATH"
 
+COPY entrypoint.sh /entrypoint.sh
+# Convert Windows line endings (CRLF) to Unix (LF) if present, then make executable
+RUN sed -i 's/\r$//' /entrypoint.sh 2>/dev/null || true && chmod +x /entrypoint.sh
+
 # Run the application
-CMD ["python", "src/etl.py"]
+ENTRYPOINT ["/entrypoint.sh"]

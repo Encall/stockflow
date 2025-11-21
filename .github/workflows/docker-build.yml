@@ -37,11 +37,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Detect changed paths
         uses: dorny/paths-filter@v3
         id: filter
         with:
+          # Compare changes against main for all events (avoids missing 'before' payload)
+          base: 'refs/heads/main'
+          # make sure enough history is fetched when searching for merge-base
+          initial-fetch-depth: '200'
           filters: |
             etl:
               - 'containers/etl/**'
@@ -110,27 +116,115 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
         
+        - name: Prepare lowercased repo name
+          id: repo
+          if: steps.check.outputs.should_build == 'true'
+          run: |
+            repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            echo "repo_lower=$repo_lower" >> "$GITHUB_OUTPUT"
+
         - name: Extract metadata
           id: meta
           if: steps.check.outputs.should_build == 'true'
           uses: docker/metadata-action@v5
           with:
-            images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.container }}
+            images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.repo_lower }}/${{ matrix.container }}
             tags: |
               type=raw,value=latest,enable={{is_default_branch}}
               type=semver,pattern={{version}}
               type=ref,event=branch
               type=ref,event=pr
               type=sha,prefix=
+
+        - name: Get SHA tag
+          id: get_sha
+          if: steps.check.outputs.should_build == 'true'
+          run: |
+            TAGS="${{ steps.meta.outputs.tags }}"
+            # TAGS are full image refs like ghcr.io/owner/repo/image:tag
+            # extract the tag part after the last ':' and search for a hex SHA
+            SHA=""
+            echo "$TAGS" | tr ',' '\n' | while read -r full; do
+              tag_only=$(echo "$full" | awk -F':' '{print $NF}')
+              if echo "$tag_only" | grep -Eiq '^[0-9a-f]{7,40}$'; then
+                SHA="$tag_only"
+                break
+              fi
+            done
+
+            if [ -z "$SHA" ]; then
+              # fallback: look for any tag that includes the string 'sha' and extract hex
+              SHA=$(echo "$TAGS" | tr ',' '\n' | awk -F':' '{print $NF}' | grep -i 'sha' | sed -E 's/.*([0-9a-f]{7,40}).*/\1/I' | head -n1 || true)
+            fi
+
+            if [ -z "$SHA" ]; then
+              # final fallback: use workflow commit SHA
+              echo "warning: couldn't find SHA-like tag in metadata; falling back to GITHUB_SHA"
+              SHA=${GITHUB_SHA}
+              # shorten to 40 or 7 chars depending on usage below
+              SHA=$(echo "$SHA" | sed -E 's/^([0-9a-f]{7,40}).*/\1/')
+            fi
+
+            if [ -z "$SHA" ]; then
+              echo "error: couldn't determine a SHA tag from metadata (TAGS: $TAGS) and GITHUB_SHA is empty" >&2
+              exit 1
+            fi
+
+            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
         
-        - name: Build and push ${{ matrix.container }} image
+        - name: Build and push SHA-tagged image
+          id: build
           if: steps.check.outputs.should_build == 'true'
           uses: docker/build-push-action@v5
           with:
             context: containers/${{ matrix.container }}
             platforms: linux/amd64,linux/arm64
             push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-            tags: ${{ steps.meta.outputs.tags }}
+            tags: ${{ env.REGISTRY }}/${{ steps.repo.outputs.repo_lower }}/${{ matrix.container }}:${{ steps.get_sha.outputs.sha }}
             labels: ${{ steps.meta.outputs.labels }}
             cache-from: type=gha
             cache-to: type=gha,mode=max
+
+        - name: Verify pushed SHA manifest and cleanup on failure
+          if: steps.check.outputs.should_build == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+          run: |
+            set -euo pipefail
+            apt-get update -y && apt-get install -y jq curl
+            REPO=$(echo "${{ github.repository }}/${{ matrix.container }}" | tr '[:upper:]' '[:lower:]')
+            SHA_TAG="${{ steps.get_sha.outputs.sha }}"
+
+            echo "Inspecting manifest for ghcr.io/$REPO:$SHA_TAG"
+            manifest=$(curl -s -H "Accept: application/vnd.oci.image.index.v1+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://ghcr.io/v2/$REPO/manifests/$SHA_TAG")
+            echo "$manifest" | jq .
+
+            if echo "$manifest" | jq -e '.manifests[] | select(.platform==null)' >/dev/null; then
+              echo "Manifest contains entries missing platform metadata; cleaning up"
+              DIGEST=$(curl -sI -H "Accept: application/vnd.oci.image.index.v1+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://ghcr.io/v2/$REPO/manifests/$SHA_TAG" | awk '/Docker-Content-Digest/ {print $2}' | tr -d '\r')
+              if [ -n "$DIGEST" ]; then
+                echo "Deleting digest: $DIGEST"
+                curl -s -X DELETE -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://ghcr.io/v2/$REPO/manifests/$DIGEST"
+              fi
+              echo "Deleted incomplete manifest; failing job to avoid partial artifacts"
+              exit 1
+            fi
+
+        - name: Promote tags from verified SHA (create manifest tags)
+          if: steps.check.outputs.should_build == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+          run: |
+            set -euo pipefail
+            REPO=$(echo "${{ github.repository }}/${{ matrix.container }}" | tr '[:upper:]' '[:lower:]')
+            ALL_TAGS="${{ steps.meta.outputs.tags }}"
+            SHA_TAG="${{ steps.get_sha.outputs.sha }}"
+
+            echo "Promoting verified SHA ($SHA_TAG) to tags:"
+            echo "$ALL_TAGS" | tr ',' '\n' | while read -r tag; do
+              [ -z "$tag" ] && continue
+              # meta may return full image refs (eg ghcr.io/owner/repo/image:tag).
+              # extract the tag part after the last ':' to avoid duplicating the repo
+              tag_only=$(echo "$tag" | awk -F':' '{print $NF}')
+              if [ -z "$tag_only" ] || [ "$tag_only" = "$SHA_TAG" ]; then
+                continue
+              fi
+              echo " - $tag_only"
+              docker buildx imagetools create -t ghcr.io/${REPO}:$tag_only ghcr.io/${REPO}:$SHA_TAG || { echo "promotion failed for $tag_only"; exit 1; }
+            done
