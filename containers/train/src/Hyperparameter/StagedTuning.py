@@ -17,7 +17,7 @@ try:
 except ImportError:
     MLFLOW_AVAILABLE = False
 
-from src.Hyperparameter.HyperparameterConfig import (
+from Hyperparameter.HyperparameterConfig import (
     DATASET_PARAMS,
     MODEL_PARAMS,
     TRAINING_PARAMS,
@@ -25,7 +25,7 @@ from src.Hyperparameter.HyperparameterConfig import (
     DEFAULT_TRAINING_CONFIG,
     get_default_model_config
 )
-from src.Hyperparameter.HyperparameterTuner import HyperparameterTuner
+from Hyperparameter.HyperparameterTuner import HyperparameterTuner
 
 
 class StagedTuning:
