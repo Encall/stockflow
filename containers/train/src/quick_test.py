@@ -8,10 +8,10 @@ import sys
 import json
 
 import torch
-from src.Hyperparameter.HyperparameterTuner import HyperparameterTuner
-from src.Hyperparameter.StagedTuning import StagedTuning
-from src.Hyperparameter.HyperparameterConfig import DATASET_PARAMS
-import src.GetDummies
+from Hyperparameter.HyperparameterTuner import HyperparameterTuner
+from Hyperparameter.StagedTuning import StagedTuning
+from Hyperparameter.HyperparameterConfig import DATASET_PARAMS
+import GetDummies
 
 
 def quick_test():
@@ -23,7 +23,7 @@ def quick_test():
     
     # Generate test data
     print("\n1. Generating test data (500 rows)...")
-    data = src.GetDummies.get_dummy(
+    data = GetDummies.get_dummy(
         spec={"Open": "float", "High": "float", "Low": "float", "Close": "float", "Volume": "int"},
         n_rows=500
     )
