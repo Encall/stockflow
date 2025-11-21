@@ -6,8 +6,6 @@ on:
 
 jobs:
   commit-lint:
-    # Only run lint when PR is created, reopened, edited OR title changed.
-    if: github.event.action != 'synchronize' || github.event.changes.title
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
