@@ -101,10 +101,10 @@ class BronzeProcessor:
             
             if start_date and end_date:
                 print('START_STOP')
-                df = stock.history(start=start_date, end=end_date, interval=interval)
+                df = stock.history(start=start_date, end=end_date)
             else:
                 print('PERIOD')
-                df = stock.history(period=period, interval=interval)
+                df = stock.history(period=period)
             
             if df.empty:
                 raise ValueError(f"No data returned for ticker {ticker}")
