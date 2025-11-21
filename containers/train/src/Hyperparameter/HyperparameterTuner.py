@@ -29,7 +29,7 @@ import model.Transformer as TransformerModel
 import model.GRU as GRUModel
 import model.NBERT as NBERTModel
 import StockDataset
-from src.Hyperparameter.HyperparameterConfig import SCALER_OPTIONS
+from Hyperparameter.HyperparameterConfig import SCALER_OPTIONS
 
 
 class HyperparameterTuner:
