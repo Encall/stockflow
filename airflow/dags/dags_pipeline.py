@@ -33,6 +33,17 @@ with DAG(
     start = EmptyOperator(task_id="start")
 
     # pull container image from ghcr.io and run the process
+    bronze_container = DockerOperator(
+        task_id="run_bronze_container",
+        image="ghcr.io/encall/stockflow/etl:latest",
+        api_version="auto",
+        auto_remove="success",
+        tty=True,
+        docker_url="unix://var/run/docker.sock",
+        environment=get_minio_config(),
+        commands=["bronze"]
+    )
+    
     silver_container = DockerOperator(
         task_id="run_etl_silver_layer",
         image="ghcr.io/encall/stockflow/etl:latest",
@@ -59,4 +70,4 @@ with DAG(
 
     end = EmptyOperator(task_id="end")
 
-    start >> silver_container >> gold_container >> end
+    start >> bronze_container >> silver_container >> gold_container >> end
