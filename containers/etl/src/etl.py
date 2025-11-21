@@ -4,26 +4,33 @@ Main ETL Pipeline for Stock Data
 
 import os
 from dotenv import load_dotenv
-from src.minio import download_data, upload_data
-from src.silver import process_silver_layer
-from src.gold import create_all_gold_files
+from minio_handler import MinioHandler
+from silver import process_silver_layer
+from gold import create_all_gold_files
 
 
 def main():
-    """Run the complete ETL pipeline"""
+    """
+    Main function to run the ETL pipeline.
+    Downloads data from MinIO, processes it, and uploads the results.
+    """
+    load_dotenv()
+    print("🚀 Starting ETL Pipeline")
+    
     # Define the single source of truth for the local data directory path
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    LOCAL_DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'data'))
+    LOCAL_DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'data'))
 
     print("=" * 60)
     print("🚀 Starting ETL Pipeline")
     print(f"Data directory: {LOCAL_DATA_DIR}")
     print("=" * 60)
     
+    minio_handler = MinioHandler()
+
     # Step 1: Download data from MinIO
     print("\n📥 Step 1: Downloading data from MinIO...")
-    load_dotenv()
-    file_names = download_data(local_data_dir=LOCAL_DATA_DIR)
+    file_names = minio_handler.download_data(local_data_dir=LOCAL_DATA_DIR)
     print(f"✅ Downloaded {len(file_names)} files")
     
     # Step 2: Process Silver Layer (Clean & Check Dates)
@@ -35,7 +42,7 @@ def main():
 
     # Step 3: Upload Silver data to MinIO
     print("\n📤 Step 3: Uploading Silver data to MinIO...")
-    silver_uploaded_files = upload_data(local_data_dir=LOCAL_DATA_DIR, layer="silver")
+    silver_uploaded_files = minio_handler.upload_data(local_data_dir=LOCAL_DATA_DIR, layer="silver")
     print(f"✅ Uploaded {len(silver_uploaded_files)} files to MinIO (silver layer).")
 
     # Step 4: Create Gold Features
@@ -47,7 +54,7 @@ def main():
 
     # Step 5: Upload Gold data to MinIO
     print("\n📤 Step 5: Uploading Gold data to MinIO...")
-    gold_uploaded_files = upload_data(local_data_dir=LOCAL_DATA_DIR, layer="gold")
+    gold_uploaded_files = minio_handler.upload_data(local_data_dir=LOCAL_DATA_DIR, layer="gold")
     print(f"✅ Uploaded {len(gold_uploaded_files)} files to MinIO (gold layer).")
     
     # Summary
@@ -76,6 +83,7 @@ def main():
                 print(f"  ❌ {filename}: {result['error']}")
 
     print("\n🎉 ETL Pipeline completed!")
+
 
 if __name__ == "__main__":
     main()
