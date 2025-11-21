@@ -5,7 +5,8 @@ import model.GRU as GRUModel
 import model.NBERT as NBERTModel
 import StockDataset
 import GetDummies
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import DataLoader
 
 
 def validate_model(model, data_loader, loss_fn=torch.nn.MSELoss()):
@@ -76,19 +77,14 @@ def train_model(
 
 
 def main():
-    data = GetDummies.get_dummy(
-        spec={
-            "Open": "float",
-            "High": "float",
-            "Low": "float",
-            "Close": "float",
-            "Volume": "int",
-        },
-        n_rows=1500,
-    )
+    data_loader = DataLoader.DataLoader("DIG")
+    data = data_loader.get_data()
+    if data is None:
+        print("Failed to load data from DataLoader.")
+        return
 
-    feat_cols = ["Open", "High", "Low", "Volume"]
-    target_col = ["Close"]
+    feat_cols = ["open", "high", "low", "volume"]
+    target_col = ["close"]
     seq_len = 50
 
     stock_data = StockDataset.MultiFeaturePriceDataset(
@@ -96,7 +92,7 @@ def main():
         feature_cols=feat_cols,
         target_col=target_col,
         seq_len=seq_len,
-        scaler=MinMaxScaler(),
+        scaler=StandardScaler()
     )
 
     train_ratio = 0.7
