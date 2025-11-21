@@ -122,15 +122,71 @@ jobs:
               type=ref,event=branch
               type=ref,event=pr
               type=sha,prefix=
+
+        - name: Get SHA tag
+          id: get_sha
+          if: steps.check.outputs.should_build == 'true'
+          run: |
+            TAGS="${{ steps.meta.outputs.tags }}"
+            # prefer a pure-hex SHA (7-40 chars), fallback to any tag containing 'sha'
+            SHA=$(echo "$TAGS" | tr ',' '\n' | grep -E '^[0-9a-f]{7,40}$' | head -n1 || true)
+            if [ -z "$SHA" ]; then
+              SHA=$(echo "$TAGS" | tr ',' '\n' | grep -i 'sha' | sed -E 's/^sha[:\-]*//I' | head -n1 || true)
+            fi
+            if [ -z "$SHA" ]; then
+              echo "error: couldn't find a SHA tag from metadata: $TAGS" >&2
+              exit 1
+            fi
+            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
         
-        - name: Build and push ${{ matrix.container }} image
+        - name: Build and push SHA-tagged image
+          id: build
           if: steps.check.outputs.should_build == 'true'
           uses: docker/build-push-action@v5
           with:
             context: containers/${{ matrix.container }}
             platforms: linux/amd64,linux/arm64
             push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-            tags: ${{ steps.meta.outputs.tags }}
+            tags: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.container }}:${{ steps.get_sha.outputs.sha }}
             labels: ${{ steps.meta.outputs.labels }}
             cache-from: type=gha
             cache-to: type=gha,mode=max
+
+        - name: Verify pushed SHA manifest and cleanup on failure
+          if: steps.check.outputs.should_build == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+          run: |
+            set -euo pipefail
+            apt-get update -y && apt-get install -y jq curl
+            REPO="${{ github.repository }}/${{ matrix.container }}"
+            SHA_TAG="${{ steps.get_sha.outputs.sha }}"
+
+            echo "Inspecting manifest for ghcr.io/$REPO:$SHA_TAG"
+            manifest=$(curl -s -H "Accept: application/vnd.oci.image.index.v1+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://ghcr.io/v2/$REPO/manifests/$SHA_TAG")
+            echo "$manifest" | jq .
+
+            if echo "$manifest" | jq -e '.manifests[] | select(.platform==null)' >/dev/null; then
+              echo "Manifest contains entries missing platform metadata; cleaning up"
+              DIGEST=$(curl -sI -H "Accept: application/vnd.oci.image.index.v1+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://ghcr.io/v2/$REPO/manifests/$SHA_TAG" | awk '/Docker-Content-Digest/ {print $2}' | tr -d '\r')
+              if [ -n "$DIGEST" ]; then
+                echo "Deleting digest: $DIGEST"
+                curl -s -X DELETE -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://ghcr.io/v2/$REPO/manifests/$DIGEST"
+              fi
+              echo "Deleted incomplete manifest; failing job to avoid partial artifacts"
+              exit 1
+            fi
+
+        - name: Promote tags from verified SHA (create manifest tags)
+          if: steps.check.outputs.should_build == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+          run: |
+            set -euo pipefail
+            REPO="${{ github.repository }}/${{ matrix.container }}"
+            ALL_TAGS="${{ steps.meta.outputs.tags }}"
+            SHA_TAG="${{ steps.get_sha.outputs.sha }}"
+
+            echo "Promoting verified SHA ($SHA_TAG) to tags:"
+            echo "$ALL_TAGS" | tr ',' '\n' | while read -r tag; do
+              [ -z "$tag" ] && continue
+              if [ "$tag" = "$SHA_TAG" ]; then continue; fi
+              echo " - $tag"
+              docker buildx imagetools create -t ghcr.io/${REPO}:$tag ghcr.io/${REPO}:$SHA_TAG || { echo "promotion failed for $tag"; exit 1; }
+            done
