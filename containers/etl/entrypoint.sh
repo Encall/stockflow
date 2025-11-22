@@ -8,7 +8,7 @@ cmd="${1:-}"
 
 if [[ -z "$cmd" ]]; then
   echo "No command specified."
-  echo "Usage: {silver|gold} [extra args...]"
+  echo "Usage: {bronze|silver|gold|bronze-append|silver-append|gold-append} [extra args...]"
   exit 1
 fi
 
@@ -27,9 +27,21 @@ case "$cmd" in
     echo "[ENTRYPOINT] Running GOLD with LOCAL_DATA_DIR=$LOCAL_DATA_DIR"
     exec python src/gold.py --local_data_dir "$LOCAL_DATA_DIR"  "$@"
     ;;
+  bronze-append)
+    echo "[ENTRYPOINT] Running BRONZE APPEND with LOCAL_DATA_DIR=$LOCAL_DATA_DIR"
+    exec python src/bronze_append.py --local_data_dir "$LOCAL_DATA_DIR" "$@"
+    ;;
+  silver-append)
+    echo "[ENTRYPOINT] Running SILVER APPEND with LOCAL_DATA_DIR=$LOCAL_DATA_DIR"
+    exec python src/silver_append.py --local_data_dir "$LOCAL_DATA_DIR" "$@"
+    ;;
+  gold-append)
+    echo "[ENTRYPOINT] Running GOLD APPEND with LOCAL_DATA_DIR=$LOCAL_DATA_DIR"
+    exec python src/gold_append.py --local_data_dir "$LOCAL_DATA_DIR" "$@"
+    ;;
   *)
     echo "Unknown command: $cmd"
-    echo "Usage: {silver|gold} [extra args...]"
+    echo "Usage: {bronze|silver|gold|bronze-append|silver-append|gold-append} [extra args...]"
     exit 1
     ;;
 esac
