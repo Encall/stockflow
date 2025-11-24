@@ -1,21 +1,14 @@
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler, MaxAbsScaler
 
-# Scaler configurations
 SCALER_OPTIONS = {
-    "minmax": MinMaxScaler(),
-    "standard": StandardScaler(),
-    "robust": RobustScaler(),
-    "maxabs": MaxAbsScaler(),
-    "none": None
+    "standard": StandardScaler()
 }
 
-# Dataset hyperparameters
 DATASET_PARAMS = {
-    "seq_len": [30, 50, 60, 90, 120],
+    "seq_len": [30, 50],
     "scaler": list(SCALER_OPTIONS.keys())
 }
 
-# Model hyperparameters
 LSTM_PARAMS = {
     "hidden_size": [32, 64, 128, 256],
     "num_layers": [1, 2, 3, 4],
@@ -33,10 +26,10 @@ GRU_PARAMS = {
 
 NBERT_PARAMS = {
     "output_size": [1],
-    "hidden_dim": [64, 128, 256],
-    "n_blocks": [2, 3, 4, 5],
-    "n_layers": [2, 3, 4, 5],
-    "dropout": [0.1, 0.2, 0.3]
+    "hidden_dim": [64],
+    "n_blocks": [5],
+    "n_layers": [5],
+    "dropout": [0.3]
 }
 
 TRANSFORMER_PARAMS = {
@@ -48,11 +41,10 @@ TRANSFORMER_PARAMS = {
     "output_size": [1]
 }
 
-# Training hyperparameters
 TRAINING_PARAMS = {
-    "lr": [0.0001, 0.0005, 0.001, 0.005, 0.01],
+    "lr": [0.005, 0.01],
     "epochs": [30],
-    "batch_size": [16, 32, 64, 128],
+    "batch_size": [64],
     "loss_fn": ["MSE", "MAE", "Huber"],
     "patience": [5, 7]
 }
@@ -64,7 +56,6 @@ MODEL_PARAMS = {
     "Transformer": TRANSFORMER_PARAMS
 }
 
-# Default configurations for staged tuning
 DEFAULT_DATASET_CONFIG = {
     "seq_len": 60,
     "scaler": "minmax"
@@ -72,14 +63,12 @@ DEFAULT_DATASET_CONFIG = {
 
 DEFAULT_TRAINING_CONFIG = {
     "lr": 0.001,
-    "epochs": 30,
-    "batch_size": 32,
+    "epochs": 5,
+    "batch_size": 128,
     "loss_fn": "MSE",
     "patience": 5
 }
 
-# Get default model configs (first value of each parameter)
 def get_default_model_config(model_type: str) -> dict:
-    """Get default configuration for a model type"""
     params = MODEL_PARAMS[model_type]
     return {key: values[0] for key, values in params.items()}
