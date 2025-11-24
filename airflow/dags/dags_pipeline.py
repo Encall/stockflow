@@ -9,10 +9,10 @@ import airflow
 # ฟังก์ชันจะรันตอน task execution
 def get_minio_config():
     return {
-        'MINIO_ACCESS_KEY': airflow.models.Variable.get("minio_access_key"),
-        'MINIO_SECRET_KEY': airflow.models.Variable.get("minio_secret_key"),
-        'MINIO_ENDPOINT': airflow.models.Variable.get("minio_endpoint"),
-        'MINIO_REGION': airflow.models.Variable.get("minio_region"),
+        'AWS_ACCESS_KEY_ID': airflow.models.Variable.get("minio_access_key"),
+        'AWS_SECRET_ACCESS_KEY': airflow.models.Variable.get("minio_secret_key"),
+        'AWS_S3_ENDPOINT_URL': airflow.models.Variable.get("minio_endpoint"),
+        'AWS_REGION': airflow.models.Variable.get("minio_region"),
     }
 
 default_args = {
@@ -41,7 +41,8 @@ with DAG(
         tty=True,
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
-        commands=["bronze"]
+        force_pull=True,
+        command=["bronze"]
     )
     
     silver_container = DockerOperator(
@@ -53,7 +54,7 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
         force_pull=True,
-        command="silver"
+        command=["silver"]
     )
     
     gold_container = DockerOperator(
@@ -65,7 +66,18 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
         force_pull=True,
-        command="gold"
+        command=["gold"]
+    )
+    
+    train_container = DockerOperator(
+        task_id="run_train_container",
+        image="ghcr.io/encall/stockflow/train:latest",
+        api_version="auto",
+        auto_remove="success",
+        tty=True,
+        docker_url="unix://var/run/docker.sock",
+        environment=get_minio_config(),
+        force_pull=True,
     )
 
     end = EmptyOperator(task_id="end")
