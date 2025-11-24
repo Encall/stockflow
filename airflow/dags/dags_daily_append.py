@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.docker.operators.docker import DockerOperator
+from airflow.operators.python import PythonOperator
+import json
+import logging
 import airflow
 
 def get_minio_config():
@@ -16,6 +19,28 @@ def get_minio_config():
         'AWS_S3_ENDPOINT_URL': airflow.models.Variable.get("minio_endpoint"),
         'AWS_REGION': airflow.models.Variable.get("minio_region"),
         'STOCK_TICKERS': airflow.models.Variable.get("stock_tickers", default_var="AAPL,GOOGL,MSFT"),
+    }
+
+
+def get_monitoring_config():
+    """Return monitoring-specific environment variables.
+
+    These are intentionally separate from the shared MinIO config so other
+    containers don't receive monitoring-only settings.
+    """
+    return {
+        'MONITORING_STOCK_SYMBOL': airflow.models.Variable.get("monitoring_stock_symbol", default_var=""),
+        'MONITORING_FEATURES': airflow.models.Variable.get("monitoring_features", default_var="open,high,low,volume"),
+        'MONITORING_TARGET': airflow.models.Variable.get("monitoring_target", default_var="close"),
+        'MONITORING_SCALER': airflow.models.Variable.get("monitoring_scaler", default_var="standard"),
+        'MONITORING_GOLD_CACHE': airflow.models.Variable.get("monitoring_gold_cache", default_var="data/gold"),
+        'MONITORING_WINDOW_SIZE': airflow.models.Variable.get("monitoring_window_size", default_var="60"),
+        'MONITORING_SPLIT_SIZE': airflow.models.Variable.get("monitoring_split_size", default_var="30"),
+        'MONITORING_SAVE_DIR': airflow.models.Variable.get("monitoring_save_dir", default_var="reports/data_drift"),
+        'MONITORING_FILE_PREFIX': airflow.models.Variable.get("monitoring_file_prefix", default_var="drift_report"),
+        'MONITORING_SAVE_HTML': airflow.models.Variable.get("monitoring_save_html", default_var="true"),
+        'MONITORING_SAVE_JSON': airflow.models.Variable.get("monitoring_save_json", default_var="true"),
+        'MONITORING_EMIT_XCOM': airflow.models.Variable.get("monitoring_emit_xcom", default_var="true"),
     }
 
 default_args = {
@@ -78,7 +103,47 @@ with DAG(
         command="gold-append",
     )
 
+    # Monitoring needs both MinIO credentials and monitoring-specific options.
+    # Merge the two small dicts so only the monitoring task receives monitoring-only envs.
+    monitoring = DockerOperator(
+        task_id="run_monitoring",
+        image="ghcr.io/encall/stockflow/monitoring:latest",
+        api_version="auto",
+        auto_remove="success",
+        tty=True,
+        docker_url="unix://var/run/docker.sock",
+        environment={**get_minio_config(), **get_monitoring_config()},
+        force_pull=False,
+        xcom_all=True,
+    )
+
+    def consume_monitoring_output(**context):
+        """Pull XCom emitted by the monitoring container and log it for testing.
+
+        The monitoring container emits a JSON payload to stdout when
+        `MONITORING_EMIT_XCOM=true`. This function tries to parse and
+        log the payload so we can verify XCom propagation in Airflow.
+        """
+        ti = context['ti']
+        payload = ti.xcom_pull(task_ids='run_monitoring')
+        logging.info('XCom payload from run_monitoring: %s', payload)
+
+        if isinstance(payload, str):
+            try:
+                parsed = json.loads(payload)
+                logging.info('Parsed JSON payload: %s', parsed)
+                return parsed
+            except Exception as exc:
+                logging.warning('Could not parse XCom payload as JSON: %s', exc)
+
+        return payload
+
+    consume_xcom = PythonOperator(
+        task_id='consume_monitoring_xcom',
+        python_callable=consume_monitoring_output,
+    )
+
     end = EmptyOperator(task_id="end")
 
     # Define task dependencies
-    start >> bronze_append >> silver_append >> gold_append >> end
+    start >> bronze_append >> silver_append >> gold_append >> monitoring >> consume_xcom >> end
