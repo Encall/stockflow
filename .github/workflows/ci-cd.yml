@@ -23,3 +23,9 @@ jobs:
     needs: docker-build
     uses: ./.github/workflows/sync-dags.yml
     secrets: inherit
+
+  deploy-app:
+    needs: docker-build
+    if: needs.docker-build.outputs.app-built == 'true'
+    uses: ./.github/workflows/deploy-app.yml
+    secrets: inherit
