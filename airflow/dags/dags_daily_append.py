@@ -11,10 +11,10 @@ import airflow
 def get_minio_config():
     """Retrieves MinIO configuration from Airflow Variables."""
     return {
-        'MINIO_ACCESS_KEY': airflow.models.Variable.get("minio_access_key"),
-        'MINIO_SECRET_KEY': airflow.models.Variable.get("minio_secret_key"),
-        'MINIO_ENDPOINT': airflow.models.Variable.get("minio_endpoint"),
-        'MINIO_REGION': airflow.models.Variable.get("minio_region"),
+        'AWS_ACCESS_KEY_ID': airflow.models.Variable.get("minio_access_key"),
+        'AWS_SECRET_ACCESS_KEY': airflow.models.Variable.get("minio_secret_key"),
+        'AWS_S3_ENDPOINT_URL': airflow.models.Variable.get("minio_endpoint"),
+        'AWS_REGION': airflow.models.Variable.get("minio_region"),
         'STOCK_TICKERS': airflow.models.Variable.get("stock_tickers", default_var="AAPL,GOOGL,MSFT"),
     }
 
