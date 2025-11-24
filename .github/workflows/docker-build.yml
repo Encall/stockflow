@@ -1,16 +1,13 @@
 name: Build and Push Docker Images
 
 on:
-  # push:
-  #   branches: [main]
-  #   paths: ['containers/**', '.github/workflows/docker-build.yml']
-  # pull_request:
-  #   branches: [main]
-  #   paths: ['containers/**']
+  push:
+    branches: [main]
+    paths: ['containers/**', '.github/workflows/docker-build.yml']
   workflow_dispatch:
     inputs:
       container:
-        description: 'Container to build (etl, train, or all)'
+        description: 'Container to build'
         required: false
         default: 'all'
         type: choice
