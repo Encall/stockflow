@@ -1,0 +1,61 @@
+name: Validate DAGs
+
+on:
+  workflow_call:
+    inputs:
+      dags-changed:
+        description: 'Whether DAG files have changed'
+        required: false
+        type: string
+        default: 'true'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate Airflow DAGs
+    if: inputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install minimal dependencies
+        run: |
+          # Install minimal Airflow without heavy dependencies
+          pip install --no-cache-dir \
+            "apache-airflow==3.0.6" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.0.6/constraints-3.11.txt" \
+            --no-deps
+          
+          # Install only essential dependencies for DAG parsing
+          pip install --no-cache-dir \
+            pendulum \
+            sqlalchemy \
+            alembic \
+            jinja2 \
+            packaging \
+            python-dateutil \
+            "apache-airflow-providers-docker>=3.0.0"
+      
+      - name: Make validation script executable
+        run: chmod +x .github/scripts/validate_dags.py
+      
+      - name: Validate DAG files
+        run: |
+          python .github/scripts/validate_dags.py airflow/dags
+      
+      - name: Summary
+        if: always()
+        run: |
+          if [ $? -eq 0 ]; then
+            echo "✅ All DAGs validated successfully"
+          else
+            echo "❌ DAG validation failed"
+            exit 1
+          fi

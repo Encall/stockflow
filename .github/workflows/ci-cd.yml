@@ -15,13 +15,49 @@ permissions:
   packages: write
 
 jobs:
+  detect-changes:
+    name: Detect Changed Paths
+    runs-on: ubuntu-latest
+    outputs:
+      dags-changed: ${{ steps.filter.outputs.dags }}
+      containers-changed: ${{ steps.filter.outputs.containers }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: 'refs/heads/main'
+          initial-fetch-depth: '200'
+          filters: |
+            dags:
+              - 'airflow/dags/**'
+            containers:
+              - 'containers/**'
+
+  validate-dags:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/validate-dags.yml
+    with:
+      dags-changed: ${{ needs.detect-changes.outputs.dags-changed }}
+
   docker-build:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.containers-changed == 'true' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/docker-build.yml
     secrets: inherit
 
   sync-dags:
-    needs: docker-build
+    needs: [docker-build, validate-dags, detect-changes]
+    if: needs.detect-changes.outputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/sync-dags.yml
+    with:
+      dags-changed: ${{ needs.detect-changes.outputs.dags-changed }}
     secrets: inherit
 
   deploy-app:
