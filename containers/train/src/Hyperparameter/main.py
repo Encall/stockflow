@@ -16,6 +16,14 @@ import DataLoader
 load_dotenv()
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
 
+# Ensure MLFLOW_S3_ENDPOINT_URL is set if AWS_S3_ENDPOINT_URL is present
+# This is required for MLflow to work with MinIO/S3-compatible storage
+aws_endpoint = os.getenv("AWS_S3_ENDPOINT_URL")
+if aws_endpoint and not os.getenv("MLFLOW_S3_ENDPOINT_URL"):
+    if not aws_endpoint.startswith(("http://", "https://")):
+        aws_endpoint = f"https://{aws_endpoint}"
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = aws_endpoint
+
 def main():
     parser = argparse.ArgumentParser(description="Run hyperparameter tuning for stock prediction models")
     parser.add_argument(
