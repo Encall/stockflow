@@ -190,18 +190,18 @@ def _run_rolling_mode(remote_prefix: str, file_prefix: str, save_html: bool, sav
 
     drift_detected = _extract_drift_flag(report) if isinstance(report, dict) else False
 
-    # Emit XCom-friendly JSON on stdout if requested (BashOperator do_xcom_push reads last line)
-    if os.getenv("MONITORING_EMIT_XCOM", "false").lower() == "true":
-        xcom_payload = {
-            "drift_detected": drift_detected,
-            "window_index": window.window_index,
-            "reference_period_start": str(window.reference_period[0]),
-            "reference_period_end": str(window.reference_period[1]),
-            "current_period_start": str(window.current_period[0]),
-            "current_period_end": str(window.current_period[1]),
-            "report_prefix": window_prefix,
-        }
-        print(xcom_payload, flush=True)
+    # Build XCom-friendly JSON payload regardless; print it as the final line
+    # if MONITORING_EMIT_XCOM=true so operators that capture the last line
+    # (BashOperator/ DockerOperator with xcom_all=False) will have a compact value.
+    xcom_payload = {
+        "drift_detected": drift_detected,
+        "window_index": window.window_index,
+        "reference_period_start": str(window.reference_period[0]),
+        "reference_period_end": str(window.reference_period[1]),
+        "current_period_start": str(window.current_period[0]),
+        "current_period_end": str(window.current_period[1]),
+        "report_prefix": window_prefix,
+    }
 
     paths: List[Path] = []
     if save_html:
@@ -215,6 +215,17 @@ def _run_rolling_mode(remote_prefix: str, file_prefix: str, save_html: bool, sav
         raise SystemExit(f"Failed to upload drift reports to storage: {e}") from e
 
     print("Rolling drift check (single window) completed successfully and reports uploaded.", flush=True)
+
+    # Emit a compact JSON payload on its own final line so Airflow can capture
+    # it cleanly as the XCom value when only the last line is stored.
+    if os.getenv("MONITORING_EMIT_XCOM", "false").lower() == "true":
+        try:
+            import json
+
+            print(json.dumps(xcom_payload), flush=True)
+        except Exception:
+            # fallback to printing the dict if something goes wrong
+            print(xcom_payload, flush=True)
 
 
 def main():
