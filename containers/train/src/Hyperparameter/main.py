@@ -2,6 +2,7 @@
 Main script to run hyperparameter tuning for stock prediction models.
 """
 import argparse
+from dotenv import load_dotenv
 import pandas as pd
 import sys
 import os
@@ -12,6 +13,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from Hyperparameter.Tuner import ModelTuner
 import DataLoader
 
+load_dotenv()
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
+
+# Ensure MLFLOW_S3_ENDPOINT_URL is set if AWS_S3_ENDPOINT_URL is present
+# This is required for MLflow to work with MinIO/S3-compatible storage
+aws_endpoint = os.getenv("AWS_S3_ENDPOINT_URL")
+if aws_endpoint and not os.getenv("MLFLOW_S3_ENDPOINT_URL"):
+    if not aws_endpoint.startswith(("http://", "https://")):
+        aws_endpoint = f"https://{aws_endpoint}"
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = aws_endpoint
 
 def main():
     parser = argparse.ArgumentParser(description="Run hyperparameter tuning for stock prediction models")
@@ -48,7 +59,7 @@ def main():
     parser.add_argument(
         "--mlflow-uri",
         type=str,
-        default="http://127.0.0.1:5000",
+        default=MLFLOW_TRACKING_URI,
         help="MLflow tracking URI"
     )
     parser.add_argument(
@@ -71,6 +82,10 @@ def main():
     )
     
     args = parser.parse_args()
+
+    # If MLFLOW_TRACKING_URI is set, force use_mlflow to True
+    if args.mlflow_uri:
+        args.use_mlflow = True
     
     print("=" * 60)
     print("Multi-Stock Hyperparameter Tuning")
