@@ -11,12 +11,24 @@ services:
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
     restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      
+      - "traefik.http.routers.stockflow.rule=Host(`stockflow.encall.space`)"
+      - "traefik.http.routers.stockflow.entrypoints=websecure"
+      - "traefik.http.routers.stockflow.tls=true"
+      - "traefik.http.routers.stockflow.tls.certresolver=leresolver"
+      - "traefik.http.routers.stockflow.service=stockflow"
+      - "traefik.http.services.stockflow.loadbalancer.server.port=8501"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    labels:
-      - "com.stockflow.service=app"
-      - "com.stockflow.version=0.2.0"
+    networks:
+      - traefik
+      
+networks:
+  traefik:
+    external: true
