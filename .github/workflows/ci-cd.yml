@@ -1,0 +1,21 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'containers/**'
+      - 'airflow/dags/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+jobs:
+  docker-build:
+    uses: ./.github/workflows/docker-build.yml
+    secrets: inherit
+
+  sync-dags:
+    needs: docker-build
+    uses: ./.github/workflows/sync-dags.yml
+    secrets: inherit
