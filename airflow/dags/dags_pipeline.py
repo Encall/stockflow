@@ -41,7 +41,7 @@ with DAG(
         tty=True,
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
-        commands="bronze"
+        commands=["bronze"]
     )
     
     silver_container = DockerOperator(
@@ -53,7 +53,7 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
         force_pull=True,
-        command="silver"
+        commands=["silver"]
     )
     
     gold_container = DockerOperator(
@@ -65,12 +65,12 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
         force_pull=True,
-        command="gold"
+        commands=["gold"]
     )
     
     train_container = DockerOperator(
-        task_id="run_etl_gold_layer",
-        image="ghcr.io/encall/stockflow/etl:latest",
+        task_id="run_train_container",
+        image="ghcr.io/encall/stockflow/train:latest",
         api_version="auto",
         auto_remove="success",
         tty=True,
