@@ -41,7 +41,7 @@ with DAG(
         tty=True,
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
-        commands=["bronze"]
+        command=["bronze"]
     )
     
     silver_container = DockerOperator(
@@ -53,7 +53,7 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
         force_pull=True,
-        commands=["silver"]
+        command=["silver"]
     )
     
     gold_container = DockerOperator(
@@ -65,7 +65,7 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
         force_pull=True,
-        commands=["gold"]
+        command=["gold"]
     )
     
     train_container = DockerOperator(
