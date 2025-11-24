@@ -17,10 +17,10 @@ class DataLoader():
         data_dir = os.path.join(local_data_dir, "data")
 
         client = Minio(
-            endpoint=os.getenv("MINIO_ENDPOINT"),
-            access_key=os.getenv("MINIO_ACCESS_KEY"),
-            secret_key=os.getenv("MINIO_SECRET_KEY"),
-            region=os.getenv("MINIO_REGION"),
+            endpoint=os.getenv("AWS_S3_ENDPOINT_URL"),
+            access_key=os.getenv("AWS_ACCESS_KEY_ID"),
+            secret_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+            region=os.getenv("AWS_REGION"),
             secure=True,
         )
 
