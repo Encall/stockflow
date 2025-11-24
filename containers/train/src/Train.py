@@ -7,6 +7,7 @@ import StockDataset
 import GetDummies
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import DataLoader
+import pandas as pd
 
 
 def validate_model(model, data_loader, loss_fn=torch.nn.MSELoss()):
@@ -61,7 +62,7 @@ def train_model(
                 print(
                     f"Epoch [{epoch + 1}/{epochs}], "
                     f"Step [{batch_idx + 1}/{len(train_loader)}], "
-                    f"Loss: {loss.item():.4f}"
+                    f"Loss: {loss.item():.6f}"
                 )
 
         avg_train_loss = total_loss / len(train_loader)
@@ -69,31 +70,47 @@ def train_model(
 
         print(
             f"Epoch {epoch + 1}/{epochs}   "
-            f"Train Loss: {avg_train_loss:.4f}   "
-            f"Val Loss: {avg_val_loss:.4f}"
+            f"Train Loss: {avg_train_loss:.6f}   "
+            f"Val Loss: {avg_val_loss:.6f}"
         )
 
     return model
 
 
 def main():
-    data_loader = DataLoader.DataLoader("DIG")
-    data = data_loader.get_data()
-    if data is None:
-        print("Failed to load data from DataLoader.")
-        return
+    all_stocks = ["DIG", "DJP", "EDC", "ERC", "EUM", 
+                  "FEZ", "FUND", "GLD", "IAE", "MIDU", 
+                  "PBP", "PID", "TSM", "TV", "UGA", 
+                  "VOO", "VSS", "XBI", "XLI", "XLP"]
+    all_data = dict()
 
+    for stock in all_stocks:
+        data_loader = DataLoader.DataLoader(stock)
+        data = data_loader.get_data()
+        if data is None:
+            print(f"Failed to load data for stock {stock} from DataLoader.")
+            return
+        all_data[stock] = data
+    
     feat_cols = ["open", "high", "low", "volume"]
     target_col = ["close"]
     seq_len = 50
 
-    stock_data = StockDataset.MultiFeaturePriceDataset(
-        data=data,
+    stock_data = StockDataset.MultiAssetDataset(
+        data=all_data,
         feature_cols=feat_cols,
         target_col=target_col,
         seq_len=seq_len,
         scaler=StandardScaler()
     )
+
+    # stock_data = StockDataset.MultiFeaturePriceDataset(
+    #     data=all_data,
+    #     feature_cols=feat_cols,
+    #     target_col=target_col,
+    #     seq_len=seq_len,
+    #     scaler=StandardScaler()
+    # )
 
     train_ratio = 0.7
     val_ratio = 0.15
@@ -134,27 +151,27 @@ def main():
     # )
 
     # GRU
-    model = GRUModel.GRU(
-        input_size=len(feat_cols),
-        hidden_size=64,
-        num_layers=4,
-        output_size=1,
-        dropout=0.1,
-        bidirectional=False,
-        pkl_path=None,
-    )
-
-    # NBERT
-    # model = NBERTModel.NBERT(
+    # model = GRUModel.GRU(
     #     input_size=len(feat_cols),
-    #     seq_len=seq_len,
+    #     hidden_size=64,
+    #     num_layers=4,
     #     output_size=1,
     #     dropout=0.1,
-    #     hidden_dim=128,
-    #     n_blocks=3,
-    #     n_layers=4,
+    #     bidirectional=False,
     #     pkl_path=None,
     # )
+
+    # NBERT
+    model = NBERTModel.NBERT(
+        input_size=len(feat_cols),
+        seq_len=seq_len,
+        output_size=1,
+        dropout=0.1,
+        hidden_dim=128,
+        n_blocks=3,
+        n_layers=4,
+        pkl_path=None,
+    )
 
     # Transformer
     # model = TransformerModel.Transformer(
@@ -175,7 +192,7 @@ def main():
         lr=0.001,
         epochs=20,
         loss_fn=torch.nn.MSELoss(),
-        log_interval=20,
+        log_interval=300,
     )
 
     test_model(
