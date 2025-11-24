@@ -114,7 +114,9 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         environment={**get_minio_config(), **get_monitoring_config()},
         force_pull=False,
-        xcom_all=True,
+        # Only push the last stdout line to XCom (compact JSON payload emitted
+        # by the monitoring container as its final line).
+        xcom_all=False,
     )
 
     def consume_monitoring_output(**context):
@@ -126,16 +128,53 @@ with DAG(
         """
         ti = context['ti']
         payload = ti.xcom_pull(task_ids='run_monitoring')
-        logging.info('XCom payload from run_monitoring: %s', payload)
+        logging.info('Raw XCom payload from run_monitoring: %s', payload)
 
-        if isinstance(payload, str):
+        # Helper: try parse a single string as JSON, then as Python literal.
+        def _try_parse_string(s: str):
+            s = s.strip()
             try:
-                parsed = json.loads(payload)
-                logging.info('Parsed JSON payload: %s', parsed)
-                return parsed
-            except Exception as exc:
-                logging.warning('Could not parse XCom payload as JSON: %s', exc)
+                return json.loads(s)
+            except Exception:
+                pass
+            try:
+                import ast
 
+                return ast.literal_eval(s)
+            except Exception:
+                return None
+
+        parsed = None
+        # DockerOperator with xcom_all=True often returns a list of log lines.
+        if isinstance(payload, list):
+            # Find the last log line that looks like a dict/JSON and parse it.
+            for line in reversed(payload):
+                if not isinstance(line, str):
+                    continue
+                if "drift_detected" in line or line.strip().startswith("{"):
+                    parsed = _try_parse_string(line)
+                    if isinstance(parsed, dict):
+                        break
+
+        elif isinstance(payload, str):
+            parsed = _try_parse_string(payload)
+
+        # If we parsed a dict, return a compact selection so XCom stays small.
+        if isinstance(parsed, dict):
+            keys = [
+                "drift_detected",
+                "window_index",
+                "report_prefix",
+                "reference_period_start",
+                "reference_period_end",
+                "current_period_start",
+                "current_period_end",
+            ]
+            reduced = {k: parsed.get(k) for k in keys if k in parsed}
+            logging.info('Selected XCom payload extracted: %s', reduced)
+            return reduced
+
+        logging.warning('No structured XCom payload found; returning raw payload')
         return payload
 
     consume_xcom = PythonOperator(

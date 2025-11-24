@@ -1,16 +1,11 @@
 name: Build and Push Docker Images
 
 on:
-  # push:
-  #   branches: [main]
-  #   paths: ['containers/**', '.github/workflows/docker-build.yml']
-  # pull_request:
-  #   branches: [main]
-  #   paths: ['containers/**']
+  workflow_call:
   workflow_dispatch:
     inputs:
       container:
-        description: 'Container to build (etl, train, or all)'
+        description: 'Container to build'
         required: false
         default: 'all'
         type: choice
@@ -195,22 +190,23 @@ jobs:
           if: steps.check.outputs.should_build == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
           run: |
             set -euo pipefail
-            apt-get update -y && apt-get install -y jq curl
+            sudo apt-get update -y && sudo apt-get install -y jq
             REPO=$(echo "${{ github.repository }}/${{ matrix.container }}" | tr '[:upper:]' '[:lower:]')
             SHA_TAG="${{ steps.get_sha.outputs.sha }}"
 
-            echo "Inspecting manifest for ghcr.io/$REPO:$SHA_TAG"
-            manifest=$(curl -s -H "Accept: application/vnd.oci.image.index.v1+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://ghcr.io/v2/$REPO/manifests/$SHA_TAG")
-            echo "$manifest" | jq .
+            echo "Inspecting manifest for ghcr.io/$REPO:$SHA_TAG using docker buildx imagetools"
+            # buildx imagetools uses the docker credentials already set by docker/login-action
+            manifest=$(docker buildx imagetools inspect ghcr.io/${REPO}:$SHA_TAG --raw 2>/dev/null || true)
+            if [ -z "$manifest" ]; then
+              echo "buildx inspect failed or returned empty output; falling back to curl (may require PAT)"
+              manifest=$(curl -s -H "Accept: application/vnd.oci.image.index.v1+json" "https://ghcr.io/v2/$REPO/manifests/$SHA_TAG" || true)
+            fi
+            echo "$manifest" | jq . || echo "$manifest"
 
+            # Fail the job if any manifest entry is missing platform metadata.
+            # We don't attempt to delete manifests here because curl+GITHUB_TOKEN can be rejected.
             if echo "$manifest" | jq -e '.manifests[] | select(.platform==null)' >/dev/null; then
-              echo "Manifest contains entries missing platform metadata; cleaning up"
-              DIGEST=$(curl -sI -H "Accept: application/vnd.oci.image.index.v1+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://ghcr.io/v2/$REPO/manifests/$SHA_TAG" | awk '/Docker-Content-Digest/ {print $2}' | tr -d '\r')
-              if [ -n "$DIGEST" ]; then
-                echo "Deleting digest: $DIGEST"
-                curl -s -X DELETE -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://ghcr.io/v2/$REPO/manifests/$DIGEST"
-              fi
-              echo "Deleted incomplete manifest; failing job to avoid partial artifacts"
+              echo "ERROR: Manifest contains entries missing platform metadata; failing job to avoid publishing partial artifacts"
               exit 1
             fi
 
