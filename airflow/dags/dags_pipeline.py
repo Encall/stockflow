@@ -41,6 +41,7 @@ with DAG(
         tty=True,
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
+        force_pull=True,
         command=["bronze"]
     )
     
