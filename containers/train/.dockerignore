@@ -8,3 +8,4 @@ venv
 README.md
 .env
 .DS_Store
+data/
