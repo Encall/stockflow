@@ -1,36 +1,36 @@
-# Build stage
-FROM python:3.11-slim-bullseye AS builder
-
-WORKDIR /app
-
-# Install build dependencies only in builder stage
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Builder stage
+FROM python:3.11-slim AS builder
 
 # Install uv
-RUN pip install --no-cache-dir uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy and install dependencies
-COPY pyproject.toml .
-RUN uv sync
-
-# Runtime stage
-FROM python:3.11-slim-bullseye
-
+# Set working directory
 WORKDIR /app
 
-# Copy only the installed dependencies from builder
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies
+RUN uv sync --frozen --no-install-project
+
+# Runtime stage
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code
 COPY . .
 
-# Set PATH to use venv
+# Set environment variables
 ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH="/app"
 
 # Expose Streamlit port
 EXPOSE 8501
 
 # Run the application
-CMD ["streamlit", "run", "stockapp.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "src/stockapp.py", "--server.port=8501", "--server.address=0.0.0.0"]
