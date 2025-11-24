@@ -4,7 +4,7 @@ import os
 
 import pandas as pd
 from evidently.report import Report
-from evidently.metrics import DataDriftMetric
+from evidently.metric_preset import DataDriftPreset
 
 
 class DriftDetector:
@@ -57,7 +57,7 @@ class DriftDetector:
         ref = reference_df[features].copy()
         cur = current_df[features].copy()
 
-        report = Report(metrics=[DataDriftMetric()])
+        report = Report(metrics=[DataDriftPreset()])
 
         report.run(
             reference_data=ref,
