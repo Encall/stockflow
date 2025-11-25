@@ -21,7 +21,7 @@ services:
       - "traefik.http.routers.stockflow.service=stockflow"
       - "traefik.http.services.stockflow.loadbalancer.server.port=8501"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "python", "-c", "import urllib.request, sys; resp = urllib.request.urlopen('http://localhost:8501/_stcore/health'); sys.exit(0 if getattr(resp, 'status', 200)==200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3

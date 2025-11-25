@@ -16,11 +16,6 @@ RUN uv sync --frozen --no-install-project
 # Runtime stage
 FROM python:3.11-slim
 
-# Install simple runtime utilities used by container tooling (healthchecks)
-RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
- && rm -rf /var/lib/apt/lists/*
-
 # Set working directory
 WORKDIR /app
 
