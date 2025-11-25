@@ -34,7 +34,7 @@ with DAG(
 
     # pull container image from ghcr.io and run the process
     bronze_container = DockerOperator(
-        task_id="run_bronze_container",
+        task_id="run_etl_bronze_layer",
         image="ghcr.io/encall/stockflow/etl:latest",
         api_version="auto",
         auto_remove="success",
