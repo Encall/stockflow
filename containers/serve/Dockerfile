@@ -20,6 +20,7 @@ WORKDIR /app
 
 # Copy application code
 COPY app ./app
+COPY model ./model
 
 # Copy installed dependencies from builder and ensure they're on PATH
 COPY --from=builder /app/.venv /app/.venv
