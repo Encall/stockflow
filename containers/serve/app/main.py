@@ -25,12 +25,6 @@ logger = logging.getLogger("model-serving")
 settings = load_settings()
 loader = ProductionModelLoader(settings)
 
-
-print("AWS_ACCESS_KEY_ID in FastAPI:", os.getenv("AWS_ACCESS_KEY_ID"))
-print("MLFLOW_TRACKING_URI:", os.getenv("MLFLOW_TRACKING_URI"))
-print("MLFLOW_S3_ENDPOINT_URL:", os.getenv("MLFLOW_S3_ENDPOINT_URL"))
-print("AWS_S3_ENDPOINT_URL:", os.getenv("AWS_S3_ENDPOINT_URL"))
-
 def _get_s3_client():
     """Initialize S3/MinIO client from environment variables."""
     endpoint_url = os.getenv("AWS_S3_ENDPOINT_URL")
