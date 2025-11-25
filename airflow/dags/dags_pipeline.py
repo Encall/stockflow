@@ -78,8 +78,9 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         environment=get_minio_config(),
         force_pull=True,
+        command=["--exhaustive"]
     )
 
     end = EmptyOperator(task_id="end")
 
-    start >> bronze_container >> silver_container >> gold_container >> end
+    start >> bronze_container >> silver_container >> gold_container >> train_container >> end

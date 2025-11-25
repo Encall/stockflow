@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.docker.operators.docker import DockerOperator
-from airflow.operators.python import PythonOperator
+from airflow.operators.python import PythonOperator, BranchPythonOperator
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 import json
 import logging
 import airflow
@@ -182,7 +183,34 @@ with DAG(
         python_callable=consume_monitoring_output,
     )
 
+    def decide_drift_trigger(**context):
+        """Decide whether to trigger the training pipeline based on drift detection."""
+        ti = context['ti']
+        # Pull the result from the previous task
+        drift_data = ti.xcom_pull(task_ids='consume_monitoring_xcom')
+        
+        if isinstance(drift_data, dict) and drift_data.get("drift_detected"):
+            logging.info("Drift detected! Triggering training pipeline.")
+            return "trigger_train_pipeline"
+        
+        logging.info("No drift detected. Skipping training.")
+        return "end"
+
+    check_drift = BranchPythonOperator(
+        task_id='check_drift',
+        python_callable=decide_drift_trigger,
+    )
+
+    trigger_train_pipeline = TriggerDagRunOperator(
+        task_id="trigger_train_pipeline",
+        trigger_dag_id="stockflow",  # matches the dag_id in dags_pipeline.py
+        conf={"drift_data": "{{ ti.xcom_pull(task_ids='consume_monitoring_xcom') }}"},
+    )
+
     end = EmptyOperator(task_id="end")
 
     # Define task dependencies
-    start >> bronze_append >> silver_append >> gold_append >> monitoring >> consume_xcom >> end
+
+    start >> bronze_append >> silver_append >> gold_append >> monitoring >> consume_xcom >> check_drift
+    check_drift >> trigger_train_pipeline >> end
+    check_drift >> end
