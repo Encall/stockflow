@@ -19,37 +19,44 @@ services:
       - stockflow-network
 
   mlflow:
-    image: python:3.10-slim
-    container_name: stockflow-mlflow
-    env_file: .env
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI}
-      MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_DEFAULT_ARTIFACT_ROOT}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL}
-      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
-    ports:
-      - "5000:5000"
-    networks:
-      - stockflow-network
-    command: >
-      bash -c "pip install mlflow boto3 psycopg2-binary &&
-               mlflow server --host 0.0.0.0 --port 5000
-               --backend-store-uri ${MLFLOW_BACKEND_STORE_URI}
-               --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT}"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      image: python:3.10-slim
+      container_name: stockflow-mlflow
+      env_file: .env
+      depends_on:
+        postgres:
+          condition: service_healthy
+      environment:
+        MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI}
+        MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_DEFAULT_ARTIFACT_ROOT}
+        AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+        AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+        AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL}
+        MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+      ports:
+        - "5000:5000"
+      networks:
+        - stockflow-network
+      # 1. Added 'mlflow[extras]' to get Gunicorn (Production server)
+      # 2. Kept 'set -f' to prevent globbing issues
+      command: >
+        bash -c "set -f && pip install mlflow[extras] boto3 psycopg2-binary &&
+        mlflow server \
+        --host 0.0.0.0 \
+        --port 5000 \
+        --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} \
+        --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT} \
+        --allowed-hosts '*' \
+        --cors-allowed-origins '*'"
+      # 3. Changed healthcheck to use Python (curl is missing in slim images)
+      healthcheck:
+        test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000')"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
 
 volumes:
   postgres_data:
 
 networks:
   stockflow-network:
-    driver: bridge
+    external: true
