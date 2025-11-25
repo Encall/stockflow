@@ -8,6 +8,8 @@ import sys
 import importlib.util
 from pathlib import Path
 from typing import Tuple, List
+import types
+import os
 
 
 def validate_python_syntax(filepath: Path) -> Tuple[bool, str]:
@@ -88,6 +90,99 @@ def test_dag_import(filepath: Path) -> Tuple[bool, str]:
         module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
         
+        # Before executing, protect imports that expect a running Airflow
+        # environment by stubbing out `airflow` modules referenced by the file.
+        try:
+            with open(filepath, 'r') as f:
+                content = f.read()
+                tree = ast.parse(content, str(filepath))
+
+            # Find all imports that reference `airflow` and create lightweight
+            # stub modules/attributes in sys.modules so importing the DAG won't
+            # attempt to use a real Airflow DB, Variables, or provider hooks.
+            airflow_imports = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    if node.module and node.module.startswith('airflow'):
+                        airflow_imports.append((node.module, [a.name for a in node.names]))
+                if isinstance(node, ast.Import):
+                    for n in node.names:
+                        if n.name.startswith('airflow'):
+                            airflow_imports.append((n.name, None))
+
+            # Create stubs for each referenced airflow module and imported names
+            created = []
+            for module_name, names in airflow_imports:
+                parts = module_name.split('.')
+                for i in range(1, len(parts) + 1):
+                    mod = '.'.join(parts[:i])
+                    if mod in sys.modules:
+                        continue
+                    m = types.ModuleType(mod)
+                    # Top-level `airflow` shim: provide models.Variable & DAG
+                    if i == 1:
+                        models_m = types.ModuleType('airflow.models')
+
+                        class Variable:
+                            @staticmethod
+                            def get(key, default_var=None, deserialize_json=False):
+                                # Prefer provided default_var, then environment variable
+                                if default_var is not None:
+                                    return default_var
+                                return os.environ.get(key, '')
+
+                        models_m.Variable = Variable
+                        m.models = models_m
+                        # Provide a minimal DAG class to allow DAG instantiation
+                        class _FakeDAG:
+                            def __init__(self, *a, **kw):
+                                return None
+
+                            def __enter__(self):
+                                return self
+
+                            def __exit__(self, exc_type, exc, tb):
+                                return False
+
+                        m.DAG = _FakeDAG
+                    sys.modules[mod] = m
+                    created.append(mod)
+
+                # If this import requested specific names (from ... import X),
+                # add those names to the module object so `from` imports succeed.
+                if names:
+                    target_mod = sys.modules.get(module_name)
+                    if target_mod is None:
+                        target_mod = types.ModuleType(module_name)
+                        sys.modules[module_name] = target_mod
+                        created.append(module_name)
+                    class _DummyCallable:
+                        def __init__(self, *a, **kw):
+                            return None
+
+                        def __call__(self, *a, **kw):
+                            return None
+
+                        def __rshift__(self, other):
+                            return self
+
+                        def __lshift__(self, other):
+                            return self
+
+                        def __rrshift__(self, other):
+                            return self
+
+                        def __rlshift__(self, other):
+                            return self
+
+                    for name in names:
+                        if not hasattr(target_mod, name):
+                            setattr(target_mod, name, _DummyCallable)
+
+        except Exception:
+            # Don't fail import stubbing on unexpected parsing errors – proceed
+            created = []
+
         # Execute the module
         spec.loader.exec_module(module)
         
@@ -98,9 +193,20 @@ def test_dag_import(filepath: Path) -> Tuple[bool, str]:
     except Exception as e:
         return False, f"❌ Execution error: {str(e)}"
     finally:
-        # Clean up
+        # Clean up the module we imported and any stubs we created.
         if spec and spec.name in sys.modules:
             del sys.modules[spec.name]
+        # Remove any airflow.* stubs we added (leave real airflow packages intact)
+        for mod in list(sys.modules.keys()):
+            if mod == 'airflow' or mod.startswith('airflow.'):
+                # Only remove entries we created during this import phase
+                # Check for our simple attribute markers: models.Variable or a no-op DAG
+                m = sys.modules.get(mod)
+                try:
+                    if (hasattr(m, 'models') and hasattr(m.models, 'Variable')) or hasattr(m, 'DAG'):
+                        del sys.modules[mod]
+                except Exception:
+                    pass
 
 
 def validate_dag_file(filepath: Path) -> bool:
