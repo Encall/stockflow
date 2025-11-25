@@ -19,6 +19,7 @@ on:
           - train
           - monitoring
           - app
+          - serve
 
 env:
   REGISTRY: ghcr.io
@@ -37,6 +38,7 @@ jobs:
       train: ${{ steps.filter.outputs.train }}
       monitoring: ${{ steps.filter.outputs.monitoring }}
       app: ${{ steps.filter.outputs.app }}
+      serve: ${{ steps.filter.outputs.serve }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -60,6 +62,8 @@ jobs:
               - 'containers/monitoring/**'
             app:
               - 'containers/app/**'
+            serve:
+              - 'containers/serve/**'
               
   build-and-push:
       name: Build and Push ${{ matrix.container }}
@@ -70,6 +74,7 @@ jobs:
         needs.detect-changes.outputs.train == 'true' ||
         needs.detect-changes.outputs.monitoring == 'true' ||
         needs.detect-changes.outputs.app == 'true' ||
+        needs.detect-changes.outputs.serve == 'true' ||
         github.event_name == 'workflow_dispatch'
         
       runs-on: ubuntu-latest
@@ -83,7 +88,7 @@ jobs:
       strategy:
         fail-fast: false
         matrix:
-          container: [etl, train, monitoring, app]
+          container: [etl, train, monitoring, app, serve]
 
       steps:
         - name: Check if should build
@@ -96,7 +101,8 @@ jobs:
                 if [[ "${{ matrix.container }}" == "etl" && "${{ needs.detect-changes.outputs.etl }}" == "true" ]] || \
                   [[ "${{ matrix.container }}" == "train" && "${{ needs.detect-changes.outputs.train }}" == "true" ]] || \
                   [[ "${{ matrix.container }}" == "monitoring" && "${{ needs.detect-changes.outputs.monitoring }}" == "true" ]] || \
-                  [[ "${{ matrix.container }}" == "app" && "${{ needs.detect-changes.outputs.app }}" == "true" ]]; then
+                  [[ "${{ matrix.container }}" == "app" && "${{ needs.detect-changes.outputs.app }}" == "true" ]] || \
+                  [[ "${{ matrix.container }}" == "serve" && "${{ needs.detect-changes.outputs.serve }}" == "true" ]]; then
                 SHOULD_BUILD=true
               fi
             # For manual dispatch, check the selected container
