@@ -56,11 +56,6 @@ MODEL_PARAMS = {
     "Transformer": TRANSFORMER_PARAMS
 }
 
-DEFAULT_DATASET_CONFIG = {
-    "seq_len": 60,
-    "scaler": "minmax"
-}
-
 DEFAULT_TRAINING_CONFIG = {
     "lr": 0.001,
     "epochs": 5,
