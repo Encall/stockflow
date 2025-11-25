@@ -2,6 +2,10 @@ name: Build and Push Docker Images
 
 on:
   workflow_call:
+    outputs:
+      app-built:
+        description: 'Whether the app container was built'
+        value: ${{ jobs.output-results.outputs.app-built }}
   workflow_dispatch:
     inputs:
       container:
@@ -245,3 +249,35 @@ jobs:
           if: matrix.container == 'app' && steps.check.outputs.should_build == 'true'
           run: |
             echo "app-built=true" >> "$GITHUB_OUTPUT"
+
+  output-results:
+    name: Aggregate Build Results
+    needs: [detect-changes, build-and-push]
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      app-built: ${{ steps.check-app.outputs.app-built }}
+    steps:
+      - name: Check if app was built
+        id: check-app
+        run: |
+          # Determine if app was built based on change detection and build job result
+          APP_CHANGED="${{ needs.detect-changes.outputs.app }}"
+          BUILD_RESULT="${{ needs.build-and-push.result }}"
+          EVENT_NAME="${{ github.event_name }}"
+          
+          # App is considered built if:
+          # 1. The build-and-push job succeeded AND
+          # 2. Either app files changed OR it was a manual workflow dispatch
+          if [[ "$BUILD_RESULT" == "success" ]]; then
+            if [[ "$APP_CHANGED" == "true" ]] || [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+              echo "app-built=true" >> "$GITHUB_OUTPUT"
+              echo "✅ App container was built"
+            else
+              echo "app-built=false" >> "$GITHUB_OUTPUT"
+              echo "ℹ️ App container was not built (no changes detected)"
+            fi
+          else
+            echo "app-built=false" >> "$GITHUB_OUTPUT"
+            echo "❌ Build job did not succeed (result: $BUILD_RESULT)"
+          fi
