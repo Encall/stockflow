@@ -14,6 +14,7 @@ on:
           - etl
           - train
           - monitoring
+          - app
 
 env:
   REGISTRY: ghcr.io
@@ -31,6 +32,7 @@ jobs:
       etl: ${{ steps.filter.outputs.etl }}
       train: ${{ steps.filter.outputs.train }}
       monitoring: ${{ steps.filter.outputs.monitoring }}
+      app: ${{ steps.filter.outputs.app }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,6 +54,8 @@ jobs:
               - 'containers/train/**'
             monitoring:
               - 'containers/monitoring/**'
+            app:
+              - 'containers/app/**'
               
   build-and-push:
       name: Build and Push ${{ matrix.container }}
@@ -61,6 +65,7 @@ jobs:
         needs.detect-changes.outputs.etl == 'true' ||
         needs.detect-changes.outputs.train == 'true' ||
         needs.detect-changes.outputs.monitoring == 'true' ||
+        needs.detect-changes.outputs.app == 'true' ||
         github.event_name == 'workflow_dispatch'
         
       runs-on: ubuntu-latest
@@ -68,10 +73,13 @@ jobs:
         contents: read
         packages: write
       
+      outputs:
+        app-built: ${{ steps.set-output.outputs.app-built }}
+      
       strategy:
         fail-fast: false
         matrix:
-          container: [etl, train, monitoring]
+          container: [etl, train, monitoring, app]
 
       steps:
         - name: Check if should build
@@ -83,7 +91,8 @@ jobs:
             if [[ "${{ github.event_name }}" == "push" ]]; then
                 if [[ "${{ matrix.container }}" == "etl" && "${{ needs.detect-changes.outputs.etl }}" == "true" ]] || \
                   [[ "${{ matrix.container }}" == "train" && "${{ needs.detect-changes.outputs.train }}" == "true" ]] || \
-                  [[ "${{ matrix.container }}" == "monitoring" && "${{ needs.detect-changes.outputs.monitoring }}" == "true" ]]; then
+                  [[ "${{ matrix.container }}" == "monitoring" && "${{ needs.detect-changes.outputs.monitoring }}" == "true" ]] || \
+                  [[ "${{ matrix.container }}" == "app" && "${{ needs.detect-changes.outputs.app }}" == "true" ]]; then
                 SHOULD_BUILD=true
               fi
             # For manual dispatch, check the selected container
@@ -230,3 +239,9 @@ jobs:
               echo " - $tag_only"
               docker buildx imagetools create -t ghcr.io/${REPO}:$tag_only ghcr.io/${REPO}:$SHA_TAG || { echo "promotion failed for $tag_only"; exit 1; }
             done
+
+        - name: Set output for app build
+          id: set-output
+          if: matrix.container == 'app' && steps.check.outputs.should_build == 'true'
+          run: |
+            echo "app-built=true" >> "$GITHUB_OUTPUT"
