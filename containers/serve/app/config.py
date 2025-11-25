@@ -25,7 +25,7 @@ def _parse_experiment_names(raw: Optional[str]) -> Optional[List[str]]:
 
 def load_settings() -> Settings:
     return Settings(
-        tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"),
+        tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "http://192.168.0.197:5000/"),
         experiment_names=_parse_experiment_names(os.getenv("MLFLOW_EXPERIMENT_NAMES")),
         experiment_prefix=os.getenv("MLFLOW_EXPERIMENT_PREFIX", "stock_") or None,
         stock_tag_key=os.getenv("MLFLOW_STOCK_TAG_KEY", "stock") or None,

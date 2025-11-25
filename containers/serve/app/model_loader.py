@@ -17,6 +17,7 @@ class ProductionModelLoader:
     def __init__(self, settings: Settings):
         self.settings = settings
         self._client = MlflowClient(tracking_uri=settings.tracking_uri)
+        print(f'Setting MLflow tracking URI to {settings.tracking_uri}')
         mlflow.set_tracking_uri(settings.tracking_uri)
         self._lock = threading.Lock()
         # Cache per stock key (None = default)
@@ -69,33 +70,42 @@ class ProductionModelLoader:
     def _find_production_run(
         self, stock: Optional[str]
     ) -> Tuple[str, str, Dict[str, Any]]:
-        filters = [
-            f"tags.{self.settings.production_tag_key} = "
-            f"'{self.settings.production_tag_value}'"
-        ]
-        if stock and self.settings.stock_tag_key:
-            filters.append(f"tags.{self.settings.stock_tag_key} = '{stock}'")
-        filter_string = " and ".join(filters)
+        # filters = [
+        #     f"tags.{self.settings.production_tag_key} = "
+        #     f"'{self.settings.production_tag_value}'"
+        # ]
+        # if stock and self.settings.stock_tag_key:
+        #     filters.append(f"tags.{self.settings.stock_tag_key} = '{stock}'")
+        # filter_string = " and ".join(filters)
 
-        runs = mlflow.search_runs(
-            experiment_ids=self._experiment_ids(stock),
-            filter_string=filter_string,
-            order_by=self._order_by(),
-            max_results=1,
-        )
+        model_name = "stock_hyperparameter_tuning_best_model"
 
-        if runs.empty:
-            raise RuntimeError(
-                f"No MLflow runs found with tag "
-                f"{self.settings.production_tag_key}="
-                f"{self.settings.production_tag_value}"
-                + (f" and {self.settings.stock_tag_key}={stock}" if stock else "")
-            )
+        alias = 'production'
+        mv = self._client.get_model_version_by_alias(model_name,alias)
+        run_id = mv.run_id
+        model_uri = f'models:/{model_name}@{alias}'
 
-        row = runs.iloc[0]
-        run_id = row.run_id
-        model_uri = f"runs:/{run_id}/{self.settings.model_artifact_path}"
-        return run_id, model_uri, row.to_dict()
+        return run_id, model_uri, {'model_version': mv.version}
+
+        # runs = mlflow.search_runs(
+        #     experiment_ids=self._experiment_ids(stock),
+        #     filter_string=filter_string,
+        #     order_by=self._order_by(),
+        #     max_results=1,
+        # )
+
+        # if runs.empty:
+        #     raise RuntimeError(
+        #         f"No MLflow runs found with tag "
+        #         f"{self.settings.production_tag_key}="
+        #         f"{self.settings.production_tag_value}"
+        #         + (f" and {self.settings.stock_tag_key}={stock}" if stock else "")
+        #     )
+
+        # row = runs.iloc[0]
+        # run_id = row.run_id
+        # model_uri = f"runs:/{run_id}/{self.settings.model_artifact_path}"
+        # return run_id, model_uri, row.to_dict()
 
     def _load_model(self, stock: Optional[str], force: bool = False):
         cache_key = stock or "_default"
@@ -117,6 +127,7 @@ class ProductionModelLoader:
             run_id,
         )
         model = mlflow.pyfunc.load_model(model_uri)
+        
         self._cache[cache_key] = {
             "model": model,
             "run_id": run_id,
