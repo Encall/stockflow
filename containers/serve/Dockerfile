@@ -1,28 +1,29 @@
 # Build stage
 FROM python:3.11-slim-bullseye AS builder
 
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Set working directory
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
 
-RUN pip install --no-cache-dir uv
-
-COPY requirements.txt .
-RUN uv pip install --system --no-cache -r requirements.txt
-
+# Install dependencies
+RUN uv sync --frozen --no-install-project
 
 # Runtime stage
 FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
-COPY --from=builder /usr/local/lib/python3.11 /usr/local/lib/python3.11
-COPY --from=builder /usr/local/bin /usr/local/bin
-
 # Copy application code
 COPY app ./app
+
+# Copy installed dependencies from builder and ensure they're on PATH
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 ENV PYTHONUNBUFFERED=1
 
