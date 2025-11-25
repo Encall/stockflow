@@ -1,0 +1,75 @@
+name: Deploy App to Portainer
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Trigger Portainer Webhook
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Trigger Portainer Webhook
+        env:
+          WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "⚠️  PORTAINER_WEBHOOK_URL secret not set. Skipping deployment."
+            echo "To enable automatic deployment:"
+            echo "1. Set up your app service in Portainer"
+            echo "2. Enable the service webhook in Portainer"
+            echo "3. Add PORTAINER_WEBHOOK_URL as a repository secret"
+            exit 0
+          fi
+          
+          echo "🚀 Triggering Portainer deployment..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$WEBHOOK_URL")
+          
+          if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 204 ]; then
+            echo "✅ Webhook triggered successfully (HTTP $HTTP_CODE)"
+          else
+            echo "❌ Webhook failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+      
+      - name: Wait for deployment
+        env:
+          WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            exit 0
+          fi
+          echo "⏳ Waiting 30 seconds for deployment to complete..."
+          sleep 30
+      
+      - name: Health check
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ] || [ -z "$APP_URL" ]; then
+            echo "⚠️  Skipping health check (APP_URL or PORTAINER_WEBHOOK_URL not configured)"
+            exit 0
+          fi
+          
+          echo "🏥 Checking app health at $APP_URL..."
+          
+          # Try up to 3 times with 10 second intervals
+          for i in {1..3}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/" || echo "000")
+            
+            if [ "$HTTP_CODE" -eq 200 ]; then
+              echo "✅ App is healthy (HTTP $HTTP_CODE)"
+              exit 0
+            else
+              echo "⚠️  Attempt $i/3: App returned HTTP $HTTP_CODE"
+              if [ $i -lt 3 ]; then
+                sleep 10
+              fi
+            fi
+          done
+          
+          echo "❌ Health check failed after 3 attempts"
+          exit 1

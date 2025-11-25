@@ -1,22 +1,20 @@
 # Build stage
 FROM python:3.11-slim-bullseye AS builder
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-# Install build dependencies only in builder stage
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
 
-# Install uv
-RUN pip install --no-cache-dir uv
-
-# Copy and install dependencies
-COPY pyproject.toml .
-RUN uv sync --no-dev
+# Install dependencies
+RUN uv sync --no-install-project
 
 # Runtime stage
 FROM python:3.11-slim-bullseye
+
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
@@ -26,17 +24,13 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application code
 COPY src/ ./src/
 
+# Copy entrypoint script
+COPY entrypoint.sh /app/
+RUN chmod +x /app/entrypoint.sh
+
 # Set PATH to use venv
-ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+ENV PATH="/app/.venv/bin:$PATH"
 
-# Clean up pip cache and unnecessary files
-RUN find /app/.venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
-    find /app/.venv -type f -name "*.pyc" -delete && \
-    find /app/.venv -type f -name "*.pyo" -delete && \
-    find /app/.venv -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
-    find /app/.venv -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
-
-# Run the application
-CMD ["python", "src/run_tuning.py"]
+# Use entrypoint script to pass arguments flexibly
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD []

@@ -5,38 +5,38 @@ SCALER_OPTIONS = {
 }
 
 DATASET_PARAMS = {
-    "seq_len": [30, 50],
+    "seq_len": [30],
     "scaler": list(SCALER_OPTIONS.keys())
 }
 
 LSTM_PARAMS = {
-    "hidden_size": [32, 64, 128, 256],
-    "num_layers": [1, 2, 3, 4],
+    "hidden_size": [32, 64, 128],
+    "num_layers": [3, 4],
     "output_size": [1],
-    "dropout": [0.1, 0.2, 0.3, 0.4]
+    "dropout": [0.1, 0.2, 0.3]
 }
 
 GRU_PARAMS = {
-    "hidden_size": [32, 64, 128, 256],
-    "num_layers": [1, 2, 3, 4],
+    "hidden_size": [32, 64, 128],
+    "num_layers": [3, 4],
     "output_size": [1],
-    "dropout": [0.1, 0.2, 0.3, 0.4],
+    "dropout": [0.1, 0.2, 0.3],
     "bidirectional": [False, True]
 }
 
 NBERT_PARAMS = {
     "output_size": [1],
-    "hidden_dim": [64],
-    "n_blocks": [5],
+    "hidden_dim": [32, 64, 128],
+    "n_blocks": [2, 3, 4],
     "n_layers": [5],
-    "dropout": [0.3]
+    "dropout": [0.1, 0.2, 0.3]
 }
 
 TRANSFORMER_PARAMS = {
     "d_model": [32, 64, 128],
     "nhead": [2, 4, 8],
-    "num_layers": [1, 2, 3, 4],
-    "dim_feedforward": [64, 128, 256, 512],
+    "num_layers": [2, 3, 4],
+    "dim_feedforward": [64, 128],
     "dropout": [0.1, 0.2, 0.3],
     "output_size": [1]
 }
@@ -45,8 +45,8 @@ TRAINING_PARAMS = {
     "lr": [0.005, 0.01],
     "epochs": [30],
     "batch_size": [64],
-    "loss_fn": ["MSE", "MAE", "Huber"],
-    "patience": [5, 7]
+    "loss_fn": ["MSE", "MAE"],
+    "patience": [5]
 }
 
 MODEL_PARAMS = {
@@ -54,11 +54,6 @@ MODEL_PARAMS = {
     "GRU": GRU_PARAMS,
     "NBERT": NBERT_PARAMS,
     "Transformer": TRANSFORMER_PARAMS
-}
-
-DEFAULT_DATASET_CONFIG = {
-    "seq_len": 60,
-    "scaler": "minmax"
 }
 
 DEFAULT_TRAINING_CONFIG = {

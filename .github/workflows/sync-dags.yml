@@ -2,6 +2,12 @@ name: Sync DAGs to Airflow Server
 
 on:
   workflow_call:
+    inputs:
+      dags-changed:
+        description: 'Whether DAG files have changed'
+        required: false
+        type: string
+        default: 'true'
   workflow_dispatch:
 
 jobs:
@@ -11,17 +17,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Detect changed DAGs
-        uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            dags:
-              - 'airflow/dags/**'
 
       - name: Install Tailscale
-        if: steps.filter.outputs.dags == 'true' || github.event_name == 'workflow_dispatch'
+        if: inputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
         uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -29,7 +27,7 @@ jobs:
           tags: tag:ci
 
       - name: Setup SSH for rsync
-        if: steps.filter.outputs.dags == 'true' || github.event_name == 'workflow_dispatch'
+        if: inputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
@@ -45,5 +43,5 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
 
       - name: Sync DAGs via rsync over Tailscale
-        if: steps.filter.outputs.dags == 'true' || github.event_name == 'workflow_dispatch'
+        if: inputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
         run: rsync -avvv --delete -e "ssh -o StrictHostKeyChecking=no" ./airflow/dags/ ${{ secrets.AIRFLOW_SERVER_USER }}@${{ secrets.AIRFLOW_SERVER_IP }}:${{ secrets.AIRFLOW_DAGS_PATH }}/
