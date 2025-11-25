@@ -9,6 +9,15 @@ on:
       - 'airflow/dags/**'
       - '.github/workflows/**'
   workflow_dispatch:
+    inputs:
+      run-full-pipeline:
+        description: 'Run full pipeline skipping change detection'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 permissions:
   contents: read
@@ -41,23 +50,25 @@ jobs:
 
   validate-dags:
     needs: detect-changes
-    if: needs.detect-changes.outputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
+    if: inputs.run-full-pipeline == 'true' || needs.detect-changes.outputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/validate-dags.yml
     with:
-      dags-changed: ${{ needs.detect-changes.outputs.dags-changed }}
+      dags-changed: ${{ inputs.run-full-pipeline == 'true' && 'true' || needs.detect-changes.outputs.dags-changed }}
 
   docker-build:
     needs: detect-changes
-    if: needs.detect-changes.outputs.containers-changed == 'true' || github.event_name == 'workflow_dispatch'
+    if: inputs.run-full-pipeline == 'true' || needs.detect-changes.outputs.containers-changed == 'true' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/docker-build.yml
+    with:
+      run-full-pipeline: ${{ inputs.run-full-pipeline }}
     secrets: inherit
 
   sync-dags:
     needs: [docker-build, validate-dags, detect-changes]
-    if: needs.detect-changes.outputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
+    if: inputs.run-full-pipeline == 'true' || needs.detect-changes.outputs.dags-changed == 'true' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/sync-dags.yml
     with:
-      dags-changed: ${{ needs.detect-changes.outputs.dags-changed }}
+      dags-changed: ${{ inputs.run-full-pipeline == 'true' && 'true' || needs.detect-changes.outputs.dags-changed }}
     secrets: inherit
 
   deploy-app:

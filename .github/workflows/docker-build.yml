@@ -2,6 +2,12 @@ name: Build and Push Docker Images
 
 on:
   workflow_call:
+    inputs:
+      run-full-pipeline:
+        description: 'Run full pipeline skipping change detection'
+        required: false
+        default: 'false'
+        type: string
     outputs:
       app-built:
         description: 'Whether the app container was built'
@@ -73,6 +79,7 @@ jobs:
       needs: detect-changes
       
       if: |
+        inputs.run-full-pipeline == 'true' ||
         needs.detect-changes.outputs.etl == 'true' ||
         needs.detect-changes.outputs.train == 'true' ||
         needs.detect-changes.outputs.monitoring == 'true' ||
@@ -96,8 +103,11 @@ jobs:
           run: |
             SHOULD_BUILD=false
             
+            # If full pipeline is enabled, build all
+            if [[ "${{ inputs.run-full-pipeline }}" == "true" ]]; then
+              SHOULD_BUILD=true
             # For push events, always build if changes detected
-            if [[ "${{ github.event_name }}" == "push" ]]; then
+            elif [[ "${{ github.event_name }}" == "push" ]]; then
                 if [[ "${{ matrix.container }}" == "etl" && "${{ needs.detect-changes.outputs.etl }}" == "true" ]] || \
                   [[ "${{ matrix.container }}" == "train" && "${{ needs.detect-changes.outputs.train }}" == "true" ]] || \
                   [[ "${{ matrix.container }}" == "monitoring" && "${{ needs.detect-changes.outputs.monitoring }}" == "true" ]] || \
