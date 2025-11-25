@@ -6,6 +6,9 @@ on:
       app-built:
         description: 'Whether the app container was built'
         value: ${{ jobs.output-results.outputs.app-built }}
+      serve-built:
+        description: 'Whether the serve container was built'
+        value: ${{ jobs.output-results.outputs.serve-built }}
   workflow_dispatch:
     inputs:
       container:
@@ -81,9 +84,6 @@ jobs:
       permissions:
         contents: read
         packages: write
-      
-      outputs:
-        app-built: ${{ steps.set-output.outputs.app-built }}
       
       strategy:
         fail-fast: false
@@ -250,12 +250,6 @@ jobs:
               docker buildx imagetools create -t ghcr.io/${REPO}:$tag_only ghcr.io/${REPO}:$SHA_TAG || { echo "promotion failed for $tag_only"; exit 1; }
             done
 
-        - name: Set output for app build
-          id: set-output
-          if: matrix.container == 'app' && steps.check.outputs.should_build == 'true'
-          run: |
-            echo "app-built=true" >> "$GITHUB_OUTPUT"
-
   output-results:
     name: Aggregate Build Results
     needs: [detect-changes, build-and-push]
@@ -263,6 +257,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       app-built: ${{ steps.check-app.outputs.app-built }}
+      serve-built: ${{ steps.check-serve.outputs.serve-built }}
     steps:
       - name: Check if app was built
         id: check-app
@@ -285,5 +280,29 @@ jobs:
             fi
           else
             echo "app-built=false" >> "$GITHUB_OUTPUT"
+            echo "❌ Build job did not succeed (result: $BUILD_RESULT)"
+          fi
+
+      - name: Check if serve was built
+        id: check-serve
+        run: |
+          # Determine if serve was built based on change detection and build job result
+          SERVE_CHANGED="${{ needs.detect-changes.outputs.serve }}"
+          BUILD_RESULT="${{ needs.build-and-push.result }}"
+          EVENT_NAME="${{ github.event_name }}"
+          
+          # Serve is considered built if:
+          # 1. The build-and-push job succeeded AND
+          # 2. Either serve files changed OR it was a manual workflow dispatch
+          if [[ "$BUILD_RESULT" == "success" ]]; then
+            if [[ "$SERVE_CHANGED" == "true" ]] || [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+              echo "serve-built=true" >> "$GITHUB_OUTPUT"
+              echo "✅ Serve container was built"
+            else
+              echo "serve-built=false" >> "$GITHUB_OUTPUT"
+              echo "ℹ️ Serve container was not built (no changes detected)"
+            fi
+          else
+            echo "serve-built=false" >> "$GITHUB_OUTPUT"
             echo "❌ Build job did not succeed (result: $BUILD_RESULT)"
           fi

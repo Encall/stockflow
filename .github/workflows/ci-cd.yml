@@ -65,3 +65,9 @@ jobs:
     if: needs.docker-build.outputs.app-built == 'true'
     uses: ./.github/workflows/deploy-app.yml
     secrets: inherit
+
+  deploy-serve:
+    needs: docker-build
+    if: needs.docker-build.outputs.serve-built == 'true'
+    uses: ./.github/workflows/deploy-serve.yml
+    secrets: inherit
