@@ -29,6 +29,11 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
+# Ensure `curl` is available for a runtime healthcheck
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends curl ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # uvicorn app.main:app --host 0.0.0.0 --port 8000
