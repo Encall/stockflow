@@ -27,7 +27,7 @@ with DAG(
     default_args=default_args,
     schedule=None,
     catchup=False,
-    tags=["stockflow"],
+    tags=["stockflow", "trigger_train"],
 ) as dag:
 
     start = EmptyOperator(task_id="start")
